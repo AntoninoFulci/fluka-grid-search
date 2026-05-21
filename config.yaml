@@ -1,0 +1,22 @@
+fluka:
+  input: 2026-01-23_Frascati_V1.inp
+  custom_executable: null
+  rfluka_path: null
+
+output:
+  directory: results/
+
+grid:
+  parameters:
+    beame: [0.05, 0.1, 0.5]
+    mat: [GALLIUM, TUNGSTEN]
+  runs_per_combo: 5
+
+execution:
+  max_parallel: 4
+
+postprocessing:
+  ".21":
+    executable: usbsuw
+  ".22":
+    executable: usbrea

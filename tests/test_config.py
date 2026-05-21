@@ -1,5 +1,5 @@
 from pathlib import Path
-import pytest
+import yaml
 from grid_search.config import load_config, Config, FlukaConfig, GridConfig, ExecutionConfig
 
 
@@ -33,8 +33,10 @@ def test_load_config_from_dict():
 
 
 def test_load_config_from_file(tmp_path):
-    import yaml
     cfg_file = tmp_path / "config.yaml"
     cfg_file.write_text(yaml.dump(RAW))
     cfg = load_config(cfg_file)
     assert cfg.grid.runs_per_combo == 3
+    assert cfg.fluka.input == Path("example.inp")
+    assert cfg.postprocessing == {".21": "usbsuw"}
+    assert cfg.fluka.custom_executable is None

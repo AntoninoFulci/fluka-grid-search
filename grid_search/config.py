@@ -8,8 +8,8 @@ import yaml
 @dataclass
 class FlukaConfig:
     input: Path
-    custom_executable: Optional[str]
-    rfluka_path: Optional[str]
+    custom_executable: Optional[str] = None
+    rfluka_path: Optional[str] = None
 
 
 @dataclass

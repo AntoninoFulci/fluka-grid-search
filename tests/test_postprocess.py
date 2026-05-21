@@ -23,6 +23,11 @@ def test_run_postprocessing_stdin_format(tmp_path):
     assert str(run2 / "sim002.21") in stdin_input
     assert stdin_input.endswith("\n\n")
 
+    # Assert ordering: run1 file comes before run2 file since run1 sorts before run2
+    idx1 = stdin_input.index(str(run1 / "sim001.21"))
+    idx2 = stdin_input.index(str(run2 / "sim002.21"))
+    assert idx1 < idx2
+
 
 def test_run_postprocessing_creates_postproc_dir(tmp_path):
     combo_dir = tmp_path / "combo"

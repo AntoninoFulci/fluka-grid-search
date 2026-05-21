@@ -12,11 +12,11 @@ def run_postprocessing(
     postproc_dir.mkdir(parents=True, exist_ok=True)
 
     for extension, executable in postprocessing.items():
-        files = [
+        files = sorted(
             f
             for run_dir in successful_run_dirs
-            for f in sorted(run_dir.glob(f"*{extension}"))
-        ]
+            for f in run_dir.glob(f"*{extension}")
+        )
         if not files:
             continue
 
@@ -28,5 +28,5 @@ def run_postprocessing(
             capture_output=True,
             cwd=postproc_dir,
         )
-        log_path = postproc_dir / f"{executable}.log"
+        log_path = postproc_dir / f"{Path(executable).name}.log"
         log_path.write_text(result.stdout + result.stderr)

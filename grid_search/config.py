@@ -76,7 +76,7 @@ def validate_config(config: Config) -> None:
                 ["fluka-config", "--bin"],
                 capture_output=True, text=True, check=True,
             )
-        except (FileNotFoundError, subprocess.CalledProcessError):
+        except (FileNotFoundError, subprocess.CalledProcessError) as exc:
             raise RuntimeError(
                 "fluka-config not found. Install FLUKA or set fluka.rfluka_path in config."
-            )
+            ) from exc

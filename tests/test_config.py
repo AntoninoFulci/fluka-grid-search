@@ -1,6 +1,5 @@
 from pathlib import Path
 import pytest
-import subprocess
 import yaml
 from unittest.mock import patch
 from grid_search.config import load_config, Config, FlukaConfig, GridConfig, ExecutionConfig, validate_config
@@ -59,7 +58,7 @@ def test_validate_config_passes(tmp_path):
     inp.write_text(MINIMAL_INP)
     raw = {**RAW, "fluka": {**RAW["fluka"], "input": str(inp)}}
     cfg = load_config(raw)
-    with patch("subprocess.run") as mock_run:
+    with patch("grid_search.config.subprocess.run") as mock_run:
         mock_run.return_value.stdout = "/usr/local/fluka/bin\n"
         mock_run.return_value.returncode = 0
         validate_config(cfg)  # should not raise
@@ -79,7 +78,7 @@ def test_validate_config_fluka_not_found(tmp_path):
     inp.write_text(MINIMAL_INP)
     raw = {**RAW, "fluka": {**RAW["fluka"], "input": str(inp)}}
     cfg = load_config(raw)
-    with patch("subprocess.run") as mock_run:
+    with patch("grid_search.config.subprocess.run") as mock_run:
         mock_run.side_effect = FileNotFoundError
         with pytest.raises(RuntimeError, match="fluka-config"):
             validate_config(cfg)

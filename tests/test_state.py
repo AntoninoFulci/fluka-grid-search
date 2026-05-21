@@ -59,3 +59,26 @@ def test_load_missing_file(tmp_path):
     sm = StateManager(tmp_path / "state.json")
     sm.load()  # should not raise; starts with empty state
     assert sm.data == {}
+
+
+def test_set_run_done_failed(tmp_path):
+    sm = StateManager(tmp_path / "state.json")
+    sm.init_combo("combo1", {}, n_runs=1)
+    sm.set_run_submitted("combo1", "run_0001", "7")
+    sm.set_run_done("combo1", "run_0001", exit_code=1)
+    assert sm.data["combo1"]["runs"]["run_0001"]["status"] == "failed"
+    assert sm.data["combo1"]["runs"]["run_0001"]["exit_code"] == 1
+
+
+def test_get_in_progress_combos(tmp_path):
+    sm = StateManager(tmp_path / "state.json")
+    sm.init_combo("combo1", {}, n_runs=1)
+    sm.init_combo("combo2", {}, n_runs=1)
+    sm.init_combo("combo3", {}, n_runs=1)
+    sm.set_combo_status("combo1", "submitted")
+    sm.set_combo_status("combo2", "postprocessing")
+    # combo3 stays "pending"
+    in_progress = sm.get_in_progress_combos()
+    assert "combo1" in in_progress
+    assert "combo2" in in_progress
+    assert "combo3" not in in_progress

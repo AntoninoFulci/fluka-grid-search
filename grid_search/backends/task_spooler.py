@@ -21,7 +21,10 @@ class TaskSpoolerBackend(ExecutionBackend):
         )
         for line in result.stdout.splitlines():
             if line.startswith("E-Level:"):
-                return int(line.split(":", 1)[1].strip())
+                try:
+                    return int(line.split(":", 1)[1].strip())
+                except ValueError:
+                    return -1
         return -1
 
     def set_max_parallel(self, n: int) -> None:

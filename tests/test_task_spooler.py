@@ -1,5 +1,7 @@
 from pathlib import Path
 from unittest.mock import patch, MagicMock
+import subprocess
+import pytest
 from grid_search.backends.task_spooler import TaskSpoolerBackend
 
 
@@ -17,7 +19,6 @@ def test_submit_returns_job_id(tmp_path):
 
 
 def test_submit_raises_on_failure(tmp_path):
-    import subprocess, pytest
     backend = TaskSpoolerBackend()
     with patch("grid_search.backends.task_spooler.subprocess.run", side_effect=subprocess.CalledProcessError(1, "ts")):
         with pytest.raises(subprocess.CalledProcessError):

@@ -13,6 +13,7 @@ def run_sentinel(args: list[str]):
     mod = importlib.util.module_from_spec(spec)
     with patch.object(sys, "argv", ["sentinel.py"] + args):
         spec.loader.exec_module(mod)
+        mod.main()
     return mod
 
 

@@ -108,3 +108,63 @@ def test_skips_done_combos(tmp_path):
     ts_submissions = [c for c in submitted if c[0] == "ts" and c[1] != "-S"]
     # only 1 combo: 2 runs + 1 sentinel = 3
     assert len(ts_submissions) == 3
+
+
+def test_reset_deletes_output_dir(tmp_path, monkeypatch):
+    cfg_path = make_project(tmp_path)
+    results = tmp_path / "results"
+    results.mkdir()
+    (results / "state.json").write_text("{}")
+
+    monkeypatch.setattr("builtins.input", lambda _: "yes")
+
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(stdout="1\n", returncode=0)
+        run_main([str(cfg_path), "--reset"])
+
+    state_file = results / "state.json"
+    assert state_file.exists()
+    state = json.loads(state_file.read_text())
+    assert "beame0.05_matGALLIUM" in state  # freshly submitted
+
+
+def test_reset_aborts_on_no(tmp_path, monkeypatch, capsys):
+    cfg_path = make_project(tmp_path)
+    results = tmp_path / "results"
+    results.mkdir()
+    marker = results / "keep_me.txt"
+    marker.write_text("important")
+
+    monkeypatch.setattr("builtins.input", lambda _: "no")
+
+    with pytest.raises(SystemExit):
+        run_main([str(cfg_path), "--reset"])
+
+    assert marker.exists()
+    out = capsys.readouterr().out
+    assert "Aborted" in out
+
+
+def test_postprocess_flag_calls_run_postprocessing(tmp_path):
+    cfg_path = make_project(tmp_path)
+    results = tmp_path / "results"
+    results.mkdir()
+    combo = "beame0.05_matGALLIUM"
+    run1 = results / combo / "run_0001"
+    run1.mkdir(parents=True)
+    state = {
+        combo: {
+            "status": "submitted",
+            "parameters": {},
+            "runs": {"run_0001": {"status": "done", "exit_code": 0}},
+        }
+    }
+    (results / "state.json").write_text(json.dumps(state))
+
+    with patch("grid_search.postprocess.run_postprocessing") as mock_pp:
+        run_main([str(cfg_path), "--postprocess"])
+
+    mock_pp.assert_called_once()
+    call_args = mock_pp.call_args[0]
+    assert call_args[0] == results / combo
+    assert call_args[2] == [run1]

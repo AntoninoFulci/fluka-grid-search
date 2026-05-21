@@ -1,0 +1,110 @@
+import importlib.util
+import json
+import sys
+import yaml
+from pathlib import Path
+from unittest.mock import patch, MagicMock
+import pytest
+
+
+def make_project(tmp_path):
+    inp = tmp_path / "example.inp"
+    inp.write_text("#define beame 0.5\n#define mat GALLIUM\nRANDOMIZ         1.0\nSTOP\n")
+    cfg = {
+        "fluka": {"input": str(inp), "custom_executable": None, "rfluka_path": "/fluka/bin"},
+        "output": {"directory": str(tmp_path / "results")},
+        "grid": {"parameters": {"beame": [0.05, 0.1], "mat": ["GALLIUM"]}, "runs_per_combo": 2},
+        "execution": {"max_parallel": 4},
+        "postprocessing": {},
+    }
+    cfg_path = tmp_path / "config.yaml"
+    cfg_path.write_text(yaml.dump(cfg))
+    return cfg_path
+
+
+def run_main(argv):
+    spec = importlib.util.spec_from_file_location(
+        "run_grid", Path(__file__).parent.parent / "run_grid.py"
+    )
+    mod = importlib.util.module_from_spec(spec)
+    with patch.object(sys, "argv", ["run_grid.py"] + argv):
+        spec.loader.exec_module(mod)
+        mod.main()
+    return mod
+
+
+def test_dry_run_submits_nothing(tmp_path, capsys):
+    cfg_path = make_project(tmp_path)
+    with patch("subprocess.run") as mock_run:
+        run_main([str(cfg_path), "--dry-run"])
+    for call in mock_run.call_args_list:
+        assert call[0][0][0] != "ts"
+    out = capsys.readouterr().out
+    assert "[dry-run]" in out
+
+
+def test_submits_correct_number_of_jobs(tmp_path):
+    cfg_path = make_project(tmp_path)
+    submitted = []
+
+    def fake_run(cmd, **kwargs):
+        r = MagicMock()
+        r.stdout = str(len(submitted)) + "\n"
+        r.returncode = 0
+        submitted.append(cmd)
+        return r
+
+    with patch("subprocess.run", side_effect=fake_run):
+        run_main([str(cfg_path)])
+
+    ts_submissions = [c for c in submitted if c[0] == "ts"]
+    # 2 combos × (2 runs + 1 sentinel) = 6 ts calls + 1 ts -S call = 7
+    assert len(ts_submissions) == 7
+
+
+def test_state_written_after_submit(tmp_path):
+    cfg_path = make_project(tmp_path)
+    job_counter = [0]
+
+    def fake_run(cmd, **kwargs):
+        r = MagicMock()
+        job_counter[0] += 1
+        r.stdout = str(job_counter[0]) + "\n"
+        r.returncode = 0
+        return r
+
+    with patch("subprocess.run", side_effect=fake_run):
+        run_main([str(cfg_path)])
+
+    state_file = tmp_path / "results" / "state.json"
+    assert state_file.exists()
+    state = json.loads(state_file.read_text())
+    assert "beame0.05_matGALLIUM" in state
+    assert "beame0.1_matGALLIUM" in state
+
+
+def test_skips_done_combos(tmp_path):
+    cfg_path = make_project(tmp_path)
+    results_dir = tmp_path / "results"
+    results_dir.mkdir()
+    state = {
+        "beame0.05_matGALLIUM": {"status": "done", "parameters": {}, "runs": {}},
+        "beame0.1_matGALLIUM": {"status": "pending", "parameters": {}, "runs": {}},
+    }
+    (results_dir / "state.json").write_text(json.dumps(state))
+
+    submitted = []
+
+    def fake_run(cmd, **kwargs):
+        r = MagicMock()
+        r.stdout = str(len(submitted)) + "\n"
+        r.returncode = 0
+        submitted.append(cmd)
+        return r
+
+    with patch("subprocess.run", side_effect=fake_run):
+        run_main([str(cfg_path)])
+
+    ts_submissions = [c for c in submitted if c[0] == "ts" and c[1] != "-S"]
+    # only 1 combo: 2 runs + 1 sentinel = 3
+    assert len(ts_submissions) == 3

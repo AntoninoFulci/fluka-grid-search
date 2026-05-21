@@ -2,6 +2,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
+import re
+import subprocess
 import yaml
 
 
@@ -58,3 +60,23 @@ def load_config(source: dict | Path) -> Config:
             for ext, v in raw.get("postprocessing", {}).items()
         },
     )
+
+
+def validate_config(config: Config) -> None:
+    inp_text = config.fluka.input.read_text()
+    for param in config.grid.parameters:
+        if not re.search(rf"^#define\s+{re.escape(param)}\s", inp_text, re.MULTILINE):
+            raise ValueError(
+                f"Parameter '{param}' not found as '#define {param}' in {config.fluka.input}"
+            )
+
+    if config.fluka.rfluka_path is None:
+        try:
+            subprocess.run(
+                ["fluka-config", "--bin"],
+                capture_output=True, text=True, check=True,
+            )
+        except (FileNotFoundError, subprocess.CalledProcessError):
+            raise RuntimeError(
+                "fluka-config not found. Install FLUKA or set fluka.rfluka_path in config."
+            )

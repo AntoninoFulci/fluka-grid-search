@@ -1,6 +1,9 @@
 from pathlib import Path
+import pytest
+import subprocess
 import yaml
-from grid_search.config import load_config, Config, FlukaConfig, GridConfig, ExecutionConfig
+from unittest.mock import patch
+from grid_search.config import load_config, Config, FlukaConfig, GridConfig, ExecutionConfig, validate_config
 
 
 RAW = {
@@ -40,3 +43,43 @@ def test_load_config_from_file(tmp_path):
     assert cfg.fluka.input == Path("example.inp")
     assert cfg.postprocessing == {".21": "usbsuw"}
     assert cfg.fluka.custom_executable is None
+
+
+MINIMAL_INP = """\
+#define beame 0.5
+#define mat GALLIUM
+RANDOMIZ         1.0
+START         10000.
+STOP
+"""
+
+
+def test_validate_config_passes(tmp_path):
+    inp = tmp_path / "example.inp"
+    inp.write_text(MINIMAL_INP)
+    raw = {**RAW, "fluka": {**RAW["fluka"], "input": str(inp)}}
+    cfg = load_config(raw)
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value.stdout = "/usr/local/fluka/bin\n"
+        mock_run.return_value.returncode = 0
+        validate_config(cfg)  # should not raise
+
+
+def test_validate_config_missing_define(tmp_path):
+    inp = tmp_path / "example.inp"
+    inp.write_text("#define mat GALLIUM\nSTOP\n")  # missing beame
+    raw = {**RAW, "fluka": {**RAW["fluka"], "input": str(inp)}}
+    cfg = load_config(raw)
+    with pytest.raises(ValueError, match="beame"):
+        validate_config(cfg)
+
+
+def test_validate_config_fluka_not_found(tmp_path):
+    inp = tmp_path / "example.inp"
+    inp.write_text(MINIMAL_INP)
+    raw = {**RAW, "fluka": {**RAW["fluka"], "input": str(inp)}}
+    cfg = load_config(raw)
+    with patch("subprocess.run") as mock_run:
+        mock_run.side_effect = FileNotFoundError
+        with pytest.raises(RuntimeError, match="fluka-config"):
+            validate_config(cfg)

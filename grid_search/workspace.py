@@ -22,7 +22,7 @@ def patch_inp(template: Path, output: Path, params: dict, seed: int) -> None:
                 patched,
             )
         if re.match(r"^RANDOMIZ\s", patched):
-            patched = f"RANDOMIZ          1.{seed:>10n}\n"
+            patched = f"RANDOMIZ          1.{seed:>10d}\n"
         result.append(patched)
     output.write_text("".join(result))
 

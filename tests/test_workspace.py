@@ -56,6 +56,16 @@ def test_patch_inp_preserves_other_lines(tmp_path):
     assert "STOP" in text
 
 
+def test_patch_inp_does_not_touch_body_refs(tmp_path):
+    template = tmp_path / "template.inp"
+    template.write_text(TEMPLATE_INP)
+    out = tmp_path / "patched.inp"
+    patch_inp(template, out, {"beame": 0.1, "mat": "TUNGSTEN"}, seed=1)
+    text = out.read_text()
+    assert "BEAM          $beame" in text
+    assert "ASSIGNMA        $mat" in text
+
+
 def test_generate_seed_range():
     for _ in range(100):
         s = generate_seed()

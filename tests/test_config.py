@@ -115,3 +115,28 @@ def test_load_config_isotope_analysis_custom_output():
     }
     cfg = load_config(raw)
     assert cfg.isotope_analysis.output == "my_report.xlsx"
+
+
+def test_load_config_isotope_analysis_with_volume():
+    raw = {
+        **RAW,
+        "isotope_analysis": {
+            "isotopes": {27: 60},
+            "rnc_files": ["merged_21"],
+            "volume": 10.0,
+        },
+    }
+    cfg = load_config(raw)
+    assert cfg.isotope_analysis.volume == pytest.approx(10.0)
+
+
+def test_load_config_isotope_analysis_volume_default():
+    raw = {
+        **RAW,
+        "isotope_analysis": {
+            "isotopes": {27: 60},
+            "rnc_files": ["merged_21"],
+        },
+    }
+    cfg = load_config(raw)
+    assert cfg.isotope_analysis.volume == pytest.approx(1.0)

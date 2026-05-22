@@ -31,6 +31,7 @@ class IsotopeConfig:
     isotopes: dict[int, int]
     rnc_files: list[str]
     output: str = "isotopes.xlsx"
+    volume: float = 1.0
 
 
 @dataclass
@@ -57,6 +58,7 @@ def load_config(source: dict | Path) -> Config:
             isotopes={int(k): int(v) for k, v in ia_raw["isotopes"].items()},
             rnc_files=list(ia_raw["rnc_files"]),
             output=ia_raw.get("output", "isotopes.xlsx"),
+            volume=float(ia_raw.get("volume", 1.0)),
         )
 
     return Config(

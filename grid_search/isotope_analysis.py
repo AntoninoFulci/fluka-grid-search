@@ -113,3 +113,40 @@ def read_resnuclei_file(
         row[f"{sym} (% Error)"] = pct_err
         row[f"{sym} (µg)"] = ug
     return row
+
+
+def run_isotope_analysis(
+    output_dir: Path,
+    config,
+    state,
+    combo: Optional[str] = None,
+) -> None:
+    ia = config.isotope_analysis
+    combos = [combo] if combo else list(state.data.keys())
+    sheets: dict[str, pd.DataFrame] = {}
+
+    for combo_name in combos:
+        combo_data = state.data.get(combo_name)
+        if not combo_data:
+            continue
+        params = combo_data.get("parameters", {})
+        postproc_dir = output_dir / combo_name / "postproc"
+        rows = []
+        for rnc_file in ia.rnc_files:
+            row = read_resnuclei_file(postproc_dir / rnc_file, ia.isotopes, params)
+            if row is not None:
+                rows.append(row)
+        if rows:
+            sheets[combo_name[:31]] = pd.DataFrame(rows)
+        else:
+            print(f"[analyze] {combo_name}: no data found, skipping")
+
+    if not sheets:
+        print("[analyze] No data found for any combo")
+        return
+
+    output_path = output_dir / ia.output
+    with pd.ExcelWriter(str(output_path), engine="openpyxl") as writer:
+        for sheet_name, df in sheets.items():
+            df.to_excel(writer, sheet_name=sheet_name, index=False)
+    print(f"[analyze] Written {output_path}")

@@ -1,10 +1,13 @@
 import pytest
+import pandas as pd
 from grid_search.isotope_analysis import (
     isotope_symbol,
     molar_mass,
     half_life,
     format_decay_time,
 )
+from grid_search.config import IsotopeConfig
+from grid_search.isotope_analysis import run_isotope_analysis
 
 
 def test_isotope_symbol_co60():
@@ -64,6 +67,7 @@ import struct
 from unittest.mock import patch, MagicMock
 from grid_search.isotope_analysis import read_resnuclei_file
 from grid_search.resnuclei import Detector
+from grid_search.state import StateManager
 
 
 def make_float_bytes(*values):
@@ -137,3 +141,75 @@ def test_read_resnuclei_file_isotope_not_present_gives_zero(tmp_path):
     assert row is not None
     assert row["Co-60 (Bq)"] == pytest.approx(0.0)
     assert row["Co-60 (% Error)"] == pytest.approx(0.0)
+
+
+def test_run_isotope_analysis_writes_excel(tmp_path):
+    ia = IsotopeConfig(isotopes={27: 60}, rnc_files=["merged_21"], output="isotopes.xlsx")
+    config = MagicMock()
+    config.isotope_analysis = ia
+
+    state = StateManager(tmp_path / "state.json")
+    state.data = {
+        "beame0.05_matGALLIUM": {
+            "parameters": {"beame": 0.05, "mat": "GALLIUM"},
+            "runs": {},
+        }
+    }
+
+    fake_row = {
+        "CoolingTime": "1.0 d",
+        "Parameters": "beame=0.05 mat=GALLIUM",
+        "Co-60 (Bq)": 1000.0,
+        "Co-60 (% Error)": 5.0,
+        "Co-60 (µg)": 0.42,
+    }
+
+    with patch("grid_search.isotope_analysis.read_resnuclei_file", return_value=fake_row):
+        run_isotope_analysis(tmp_path, config, state)
+
+    output = tmp_path / "isotopes.xlsx"
+    assert output.exists()
+    df = pd.read_excel(output, sheet_name="beame0.05_matGALLIUM")
+    assert "CoolingTime" in df.columns
+    assert "Co-60 (Bq)" in df.columns
+    assert df["Co-60 (Bq)"].iloc[0] == pytest.approx(1000.0)
+
+
+def test_run_isotope_analysis_no_files_prints_warning(tmp_path, capsys):
+    ia = IsotopeConfig(isotopes={27: 60}, rnc_files=["merged_21"])
+    config = MagicMock()
+    config.isotope_analysis = ia
+
+    state = StateManager(tmp_path / "state.json")
+    state.data = {"beame0.05_matGALLIUM": {"parameters": {}, "runs": {}}}
+
+    with patch("grid_search.isotope_analysis.read_resnuclei_file", return_value=None):
+        run_isotope_analysis(tmp_path, config, state)
+
+    assert not (tmp_path / "isotopes.xlsx").exists()
+    out = capsys.readouterr().out
+    assert "No data found" in out
+
+
+def test_run_isotope_analysis_combo_filter(tmp_path):
+    ia = IsotopeConfig(isotopes={27: 60}, rnc_files=["merged_21"])
+    config = MagicMock()
+    config.isotope_analysis = ia
+
+    state = StateManager(tmp_path / "state.json")
+    state.data = {
+        "beame0.05_matGALLIUM": {"parameters": {}, "runs": {}},
+        "beame0.1_matGALLIUM": {"parameters": {}, "runs": {}},
+    }
+
+    calls = []
+
+    def fake_read(path, isotopes, params):
+        calls.append(str(path))
+        return None
+
+    with patch("grid_search.isotope_analysis.read_resnuclei_file", side_effect=fake_read):
+        run_isotope_analysis(tmp_path, config, state, combo="beame0.05_matGALLIUM")
+
+    assert len(calls) == 1
+    assert "beame0.05_matGALLIUM" in calls[0]

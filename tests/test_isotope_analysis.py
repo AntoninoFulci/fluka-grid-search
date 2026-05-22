@@ -35,6 +35,11 @@ def test_half_life_unknown_returns_zero():
     assert half_life(999, 999) == 0.0
 
 
+def test_half_life_stable_isotope_returns_zero():
+    # Fe-56 is stable; radioactivedecay returns "stable" for its half_life()
+    assert half_life(26, 56) == 0.0
+
+
 def test_format_decay_time_seconds():
     assert format_decay_time(30) == "30 s"
 
@@ -48,8 +53,7 @@ def test_format_decay_time_hours():
 
 
 def test_format_decay_time_days():
-    result = format_decay_time(3 * 86400)
-    assert "d" in result
+    assert format_decay_time(3 * 86400) == "3.0 d"
 
 
 def test_format_decay_time_zero():

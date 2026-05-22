@@ -21,7 +21,7 @@ def molar_mass(z: int, a: int) -> float:
     try:
         nuc = rd.Nuclide(isotope_symbol(z, a))
         return float(nuc.atomic_mass)
-    except Exception:
+    except (ValueError, KeyError):
         return 0.0
 
 
@@ -29,8 +29,10 @@ def half_life(z: int, a: int) -> float:
     try:
         nuc = rd.Nuclide(isotope_symbol(z, a))
         hl = nuc.half_life()
-        return float(hl) if hl is not None else 0.0
-    except Exception:
+        if hl is None or hl == "stable" or (isinstance(hl, float) and math.isinf(hl)):
+            return 0.0
+        return float(hl)
+    except (ValueError, KeyError):
         return 0.0
 
 
@@ -44,7 +46,7 @@ def format_decay_time(seconds: float) -> str:
     month = 30 * day
     year = 365.25 * day
     if seconds < minute:
-        return f"{int(seconds)} s"
+        return f"{round(seconds)} s"
     elif seconds < hour:
         return f"{int(seconds / minute)} min"
     elif seconds < day:

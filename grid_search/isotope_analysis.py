@@ -275,4 +275,11 @@ def run_isotope_analysis(
         for sheet_name, df in sheets.items():
             df.to_excel(writer, sheet_name=sheet_name, index=False)
         _build_summary_sheet(writer, summary_rows, ia.volume)
+        _build_pivot_sheet(
+            writer,
+            summary_rows,
+            list(config.grid.parameters.keys()),
+            ia.pivot_group_by,
+            ia.volume,
+        )
     print(f"[analyze] Written {output_path}")

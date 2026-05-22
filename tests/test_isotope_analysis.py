@@ -149,6 +149,7 @@ def test_run_isotope_analysis_writes_excel(tmp_path):
     ia = IsotopeConfig(isotopes={27: 60}, rnc_files=["merged_21"], output="isotopes.xlsx")
     config = MagicMock()
     config.isotope_analysis = ia
+    config.grid.parameters = {"beame": [0.05], "mat": ["GALLIUM"]}
 
     state = StateManager(tmp_path / "state.json")
     state.data = {
@@ -182,6 +183,7 @@ def test_run_isotope_analysis_no_files_prints_warning(tmp_path, capsys):
     ia = IsotopeConfig(isotopes={27: 60}, rnc_files=["merged_21"])
     config = MagicMock()
     config.isotope_analysis = ia
+    config.grid.parameters = {}
 
     state = StateManager(tmp_path / "state.json")
     state.data = {"beame0.05_matGALLIUM": {"parameters": {}, "runs": {}}}
@@ -198,6 +200,7 @@ def test_run_isotope_analysis_combo_filter(tmp_path):
     ia = IsotopeConfig(isotopes={27: 60}, rnc_files=["merged_21"])
     config = MagicMock()
     config.isotope_analysis = ia
+    config.grid.parameters = {}
 
     state = StateManager(tmp_path / "state.json")
     state.data = {
@@ -222,6 +225,7 @@ def test_tdecay_s_not_in_combo_sheets(tmp_path):
     ia = IsotopeConfig(isotopes={27: 60}, rnc_files=["merged_21"])
     config = MagicMock()
     config.isotope_analysis = ia
+    config.grid.parameters = {}
 
     state = StateManager(tmp_path / "state.json")
     state.data = {"beame0.05_matGALLIUM": {"parameters": {}, "runs": {}}}
@@ -246,6 +250,7 @@ def test_summary_sheet_is_last_sheet(tmp_path):
     ia = IsotopeConfig(isotopes={27: 60}, rnc_files=["merged_21"], volume=5.0)
     config = MagicMock()
     config.isotope_analysis = ia
+    config.grid.parameters = {"beame": [0.05]}
 
     state = StateManager(tmp_path / "state.json")
     state.data = {"beame0.05_matGALLIUM": {"parameters": {"beame": 0.05}, "runs": {}}}
@@ -263,13 +268,15 @@ def test_summary_sheet_is_last_sheet(tmp_path):
         run_isotope_analysis(tmp_path, config, state)
 
     xl = pd.ExcelFile(tmp_path / "isotopes.xlsx")
-    assert xl.sheet_names[-1] == "Summary"
+    assert "Summary" in xl.sheet_names
+    assert xl.sheet_names[-1] == "Pivot"
 
 
 def test_summary_sheet_bq_values(tmp_path):
     ia = IsotopeConfig(isotopes={27: 60}, rnc_files=["merged_21"], volume=5.0)
     config = MagicMock()
     config.isotope_analysis = ia
+    config.grid.parameters = {"beame": [0.05]}
 
     state = StateManager(tmp_path / "state.json")
     state.data = {"beame0.05_matGALLIUM": {"parameters": {"beame": 0.05}, "runs": {}}}
@@ -298,6 +305,7 @@ def test_summary_sheet_normalized_values(tmp_path):
     ia = IsotopeConfig(isotopes={27: 60}, rnc_files=["merged_21"], volume=5.0)
     config = MagicMock()
     config.isotope_analysis = ia
+    config.grid.parameters = {"beame": [0.05]}
 
     state = StateManager(tmp_path / "state.json")
     state.data = {"beame0.05_matGALLIUM": {"parameters": {"beame": 0.05}, "runs": {}}}
@@ -332,6 +340,7 @@ def test_summary_sheet_absent_when_no_data(tmp_path):
     ia = IsotopeConfig(isotopes={27: 60}, rnc_files=["merged_21"])
     config = MagicMock()
     config.isotope_analysis = ia
+    config.grid.parameters = {}
 
     state = StateManager(tmp_path / "state.json")
     state.data = {"beame0.05_matGALLIUM": {"parameters": {}, "runs": {}}}
@@ -505,3 +514,31 @@ def test_build_pivot_sheet_group_by_values(tmp_path):
     flat = [cell.value for row in ws.iter_rows() for cell in row]
     assert 100.0 in flat
     assert 50.0 in flat
+
+
+def test_pivot_sheet_is_written(tmp_path):
+    ia = IsotopeConfig(isotopes={27: 60}, rnc_files=["merged_21"], volume=5.0)
+    config = MagicMock()
+    config.isotope_analysis = ia
+    config.grid.parameters = {"beame": [0.05, 0.5]}
+
+    state = StateManager(tmp_path / "state.json")
+    state.data = {
+        "beame0.05": {"parameters": {"beame": 0.05}, "runs": {}},
+        "beame0.5":  {"parameters": {"beame": 0.5},  "runs": {}},
+    }
+
+    fake_row = {
+        "_tdecay_s": 86400.0,
+        "CoolingTime": "1.0 d",
+        "Parameters": "beame=0.05",
+        "Co-60 (Bq)": 1000.0,
+        "Co-60 (% Error)": 5.0,
+        "Co-60 (µg)": 0.42,
+    }
+
+    with patch("grid_search.isotope_analysis.read_resnuclei_file", return_value=fake_row):
+        run_isotope_analysis(tmp_path, config, state)
+
+    xl = pd.ExcelFile(tmp_path / "isotopes.xlsx")
+    assert "Pivot" in xl.sheet_names

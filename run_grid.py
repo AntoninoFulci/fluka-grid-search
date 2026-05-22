@@ -6,7 +6,6 @@ from pathlib import Path
 from grid_search.backends.task_spooler import TaskSpoolerBackend
 from grid_search.config import load_config, validate_config
 from grid_search.grid import combo_name, generate_combinations
-from grid_search.isotope_analysis import run_isotope_analysis
 from grid_search.state import StateManager
 from grid_search.workspace import create_run_workspace, generate_seed, patch_inp
 
@@ -99,6 +98,7 @@ def _do_postprocess(config, state, args):
 
 
 def _do_analyze(config, state, args):
+    from grid_search.isotope_analysis import run_isotope_analysis
     if config.isotope_analysis is None:
         print("Error: no isotope_analysis section in config")
         sys.exit(1)
@@ -114,6 +114,10 @@ def main() -> None:
 
     if args.reset and args.analyze:
         print("Error: --reset and --analyze are mutually exclusive")
+        sys.exit(1)
+
+    if args.analyze and args.postprocess:
+        print("Error: --analyze and --postprocess are mutually exclusive")
         sys.exit(1)
 
     config = load_config(args.config)

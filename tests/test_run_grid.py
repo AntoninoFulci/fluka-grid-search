@@ -200,3 +200,6 @@ def test_analyze_flag_calls_run_isotope_analysis(tmp_path):
         run_main([str(cfg_path), "--analyze"])
 
     mock_analyze.assert_called_once()
+    # Verify the call was made with combo=None (no --combo argument given)
+    call_kwargs = mock_analyze.call_args[1]
+    assert call_kwargs.get("combo") is None

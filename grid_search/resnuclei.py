@@ -54,7 +54,7 @@ class Resnuclei:
         self.statpos = -1
         self.nisomers = 0
         self.evol = False
-        self.tdecay: float | tuple = 0.0
+        self.tdecay: float = 0.0
         self._f = None
         self._read_header()
 
@@ -92,89 +92,99 @@ class Resnuclei:
 
     def _read_header(self) -> None:
         self._open()
-        self._read_base_header()
-        if self.ncase <= 0:
-            self.evol = True
-            self.ncase = -self.ncase
-            data = fortran_read(self._f)
-            nir = (len(data) - 4) // 8
-            struct.unpack("=i%df" % (2 * nir), data)
-        else:
-            self.evol = False
-
-        for _ in range(1000):
-            data = fortran_read(self._f)
-            if data is None:
-                break
-            size = len(data)
-            if size == 14:
-                if data[:8] == b"ISOMERS:":
-                    self.nisomers = struct.unpack("=10xi", data)[0]
-                    fortran_read(self._f)
-                    data = fortran_read(self._f)
-                    size = len(data)
-                if data[:10] == b"STATISTICS":
-                    self.statpos = self._f.tell()
-                    break
-            elif size != 38:
-                raise IOError(f"Invalid RESNUCLEi header size={size}")
-
-            header = struct.unpack("=i10siif3i", data)
-            det = Detector(
-                num=header[0],
-                name=header[1].strip().decode(errors="replace"),
-                volume=header[4],
-                mhigh=header[5],
-                zhigh=header[6],
-                nmzmin=header[7],
-            )
-            self.detector.append(det)
-
-            if self.evol:
+        try:
+            self._read_base_header()
+            if self.ncase <= 0:
+                self.evol = True
+                self.ncase = -self.ncase
                 data = fortran_read(self._f)
-                self.tdecay = struct.unpack("=f", data)
+                if data is None:
+                    raise IOError("Unexpected EOF reading evolution header")
+                nir = (len(data) - 4) // 8
+                struct.unpack("=i%df" % (2 * nir), data)
             else:
-                self.tdecay = 0.0
+                self.evol = False
 
-            size = det.zhigh * det.mhigh * 4
-            if size != fortran_skip(self._f):
-                raise IOError("Invalid RESNUCLEi file")
-        self._close()
+            for _ in range(1000):
+                data = fortran_read(self._f)
+                if data is None:
+                    break
+                size = len(data)
+                if size == 14:
+                    if data[:8] == b"ISOMERS:":
+                        self.nisomers = struct.unpack("=10xi", data)[0]
+                        fortran_read(self._f)
+                        data = fortran_read(self._f)
+                        if data is None:
+                            raise IOError("Unexpected EOF reading ISOMERS header")
+                        size = len(data)
+                    if data[:10] == b"STATISTICS":
+                        self.statpos = self._f.tell()
+                        break
+                elif size != 38:
+                    raise IOError(f"Invalid RESNUCLEi header size={size}")
 
-    def read_data(self, n: int) -> bytes:
+                header = struct.unpack("=i10siif3i", data)
+                det = Detector(
+                    num=header[0],
+                    name=header[1].strip().decode(errors="replace"),
+                    volume=header[4],
+                    mhigh=header[5],
+                    zhigh=header[6],
+                    nmzmin=header[7],
+                )
+                self.detector.append(det)
+
+                if self.evol:
+                    data = fortran_read(self._f)
+                    self.tdecay = struct.unpack("=f", data)[0]
+                else:
+                    self.tdecay = 0.0
+
+                size = det.zhigh * det.mhigh * 4
+                if size != fortran_skip(self._f):
+                    raise IOError("Invalid RESNUCLEi file")
+        finally:
+            self._close()
+
+    def read_data(self, n: int) -> Optional[bytes]:
         self._open()
-        fortran_skip(self._f)
-        if self.evol:
-            fortran_skip(self._f)
-        for _ in range(n):
+        try:
             fortran_skip(self._f)
             if self.evol:
                 fortran_skip(self._f)
-            fortran_skip(self._f)
-            if self.nisomers:
+            for _ in range(n):
                 fortran_skip(self._f)
+                if self.evol:
+                    fortran_skip(self._f)
                 fortran_skip(self._f)
-        fortran_skip(self._f)
-        if self.evol:
+                if self.nisomers:
+                    fortran_skip(self._f)
+                    fortran_skip(self._f)
             fortran_skip(self._f)
-        data = fortran_read(self._f)
-        self._close()
-        return data
+            if self.evol:
+                fortran_skip(self._f)
+            data = fortran_read(self._f)
+            return data
+        finally:
+            self._close()
 
     def read_stat(self, n: int) -> Optional[tuple]:
         if self.statpos < 0:
             return None
         self._open()
-        self._f.seek(self.statpos)
-        nskip = 7 * n if self.nisomers else 6 * n
-        for _ in range(nskip):
-            fortran_skip(self._f)
-        total = fortran_read(self._f)
-        A = fortran_read(self._f)
-        errA = fortran_read(self._f)
-        Z = fortran_read(self._f)
-        errZ = fortran_read(self._f)
-        data = fortran_read(self._f)
-        iso = fortran_read(self._f) if self.nisomers else None
-        self._close()
-        return (total, A, errA, Z, errZ, data, iso)
+        try:
+            self._f.seek(self.statpos)
+            nskip = 7 * n if self.nisomers else 6 * n
+            for _ in range(nskip):
+                fortran_skip(self._f)
+            total = fortran_read(self._f)
+            A = fortran_read(self._f)
+            errA = fortran_read(self._f)
+            Z = fortran_read(self._f)
+            errZ = fortran_read(self._f)
+            data = fortran_read(self._f)
+            iso = fortran_read(self._f) if self.nisomers else None
+            return (total, A, errA, Z, errZ, data, iso)
+        finally:
+            self._close()

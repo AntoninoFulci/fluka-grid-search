@@ -2,12 +2,20 @@
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
+[tool.setuptools]
+packages = ["grid_search"]
+
 [project]
 name = "fluka-grid-search"
 version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [
     "pyyaml>=6.0",
+    "pandas>=2.0",
+    "openpyxl>=3.1",
+    "periodictable>=1.6",
+    "radioactivedecay>=0.4",
+    "numpy>=1.24",
 ]
 
 [project.optional-dependencies]

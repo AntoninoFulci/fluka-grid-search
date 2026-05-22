@@ -82,3 +82,39 @@ def test_validate_config_fluka_not_found(tmp_path):
         mock_run.side_effect = FileNotFoundError
         with pytest.raises(RuntimeError, match="fluka-config"):
             validate_config(cfg)
+
+
+from grid_search.config import IsotopeConfig
+
+
+def test_load_config_with_isotope_analysis():
+    raw = {
+        **RAW,
+        "isotope_analysis": {
+            "isotopes": {27: 60, 55: 137},
+            "rnc_files": ["merged_21", "merged_22"],
+        },
+    }
+    cfg = load_config(raw)
+    assert cfg.isotope_analysis is not None
+    assert cfg.isotope_analysis.isotopes == {27: 60, 55: 137}
+    assert cfg.isotope_analysis.rnc_files == ["merged_21", "merged_22"]
+    assert cfg.isotope_analysis.output == "isotopes.xlsx"
+
+
+def test_load_config_isotope_analysis_absent():
+    cfg = load_config(RAW)
+    assert cfg.isotope_analysis is None
+
+
+def test_load_config_isotope_analysis_custom_output():
+    raw = {
+        **RAW,
+        "isotope_analysis": {
+            "isotopes": {27: 60},
+            "rnc_files": ["merged_21"],
+            "output": "my_report.xlsx",
+        },
+    }
+    cfg = load_config(raw)
+    assert cfg.isotope_analysis.output == "my_report.xlsx"

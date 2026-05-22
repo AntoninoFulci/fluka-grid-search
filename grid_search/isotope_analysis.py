@@ -147,6 +147,98 @@ def _build_summary_sheet(
     ws.cell(row=n + 4, column=1, value=f"Normalized Activity (Bq/cm³) — volume: {volume} cm³")
 
 
+def _build_pivot_sheet(
+    writer: pd.ExcelWriter,
+    summary_rows: list[dict],
+    param_names: list[str],
+    group_by: Optional[str],
+    volume: float,
+) -> None:
+    if not summary_rows:
+        return
+
+    sheet_name = "Pivot"
+
+    if group_by is not None:
+        seen: list[str] = []
+        buckets: dict[str, list[dict]] = {}
+        for r in summary_rows:
+            v = str(r[group_by])
+            if v not in buckets:
+                seen.append(v)
+                buckets[v] = []
+            buckets[v].append(r)
+        group_items = [(v, buckets[v]) for v in seen]
+        column_params = [p for p in param_names if p != group_by]
+    else:
+        group_items = [(None, summary_rows)]
+        column_params = param_names[:]
+
+    if not column_params:
+        return
+
+    excel_row = 1  # 1-indexed; startrow=N writes to Excel row N+1
+
+    for group_value, rows in group_items:
+        df = pd.DataFrame(rows)
+        bq_cols = [c for c in df.columns if c.endswith("(Bq)")]
+
+        ct_order = (
+            df[["_tdecay_s", "CoolingTime"]]
+            .drop_duplicates()
+            .sort_values("_tdecay_s")["CoolingTime"]
+            .tolist()
+        )
+        df["CoolingTime"] = pd.Categorical(
+            df["CoolingTime"], categories=ct_order, ordered=True
+        )
+
+        df_melt = df.melt(
+            id_vars=["CoolingTime"] + column_params,
+            value_vars=bq_cols,
+            var_name="Isotope",
+            value_name="Bq",
+        )
+        df_melt["Isotope"] = df_melt["Isotope"].str.replace(r" \(Bq\)$", "", regex=True)
+
+        pivot_bq = df_melt.pivot_table(
+            index=["Isotope", "CoolingTime"],
+            columns=column_params,
+            values="Bq",
+            aggfunc="first",
+            observed=True,
+        )
+
+        n_col_levels = pivot_bq.columns.nlevels
+        n_data = len(pivot_bq)
+
+        bq_title = f"{group_by}={group_value}" if group_value is not None else "Activity (Bq)"
+        pivot_bq.to_excel(writer, sheet_name=sheet_name, startrow=excel_row)
+        ws = writer.sheets[sheet_name]
+        ws.cell(row=excel_row, column=1, value=bq_title)
+        excel_row += 1 + n_col_levels + n_data
+
+        excel_row += 1  # 1-row gap
+
+        pivot_norm = pivot_bq / volume
+        norm_title = f"Normalized Activity (Bq/cm³) — volume: {volume} cm³"
+        norm_start_row = excel_row
+        pivot_norm.to_excel(writer, sheet_name=sheet_name, startrow=excel_row)
+        ws.cell(row=excel_row, column=1, value=norm_title)
+        # Force float serialization so openpyxl writes "50.0" not "50" in XML,
+        # ensuring values round-trip as float rather than int.
+        norm_data_start = norm_start_row + 1 + n_col_levels
+        norm_data_end = norm_data_start + n_data
+        for r in range(norm_data_start, norm_data_end + 1):
+            for c in range(1, ws.max_column + 1):
+                cell = ws.cell(row=r, column=c)
+                if isinstance(cell._value, (int, float)):
+                    cell._value = str(float(cell._value))
+        excel_row += 1 + n_col_levels + n_data
+
+        excel_row += 2  # 2-row gap before next group
+
+
 def run_isotope_analysis(
     output_dir: Path,
     config,

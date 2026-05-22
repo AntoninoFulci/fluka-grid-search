@@ -5,7 +5,9 @@ from grid_search.isotope_analysis import (
     molar_mass,
     half_life,
     format_decay_time,
+    _build_pivot_sheet,
 )
+from openpyxl import load_workbook
 from grid_search.config import IsotopeConfig
 from grid_search.isotope_analysis import run_isotope_analysis
 
@@ -338,3 +340,167 @@ def test_summary_sheet_absent_when_no_data(tmp_path):
         run_isotope_analysis(tmp_path, config, state)
 
     assert not (tmp_path / "isotopes.xlsx").exists()
+
+
+def _make_summary_rows_simple():
+    """2 isotopes, 2 cooling times, 2 beame values — no grouping param."""
+    return [
+        {"_tdecay_s": 0.0,     "CoolingTime": "0 s", "beame": 0.1, "Co-60 (Bq)": 100.0, "H-3 (Bq)": 10.0},
+        {"_tdecay_s": 86400.0, "CoolingTime": "1 d", "beame": 0.1, "Co-60 (Bq)": 80.0,  "H-3 (Bq)": 8.0},
+        {"_tdecay_s": 0.0,     "CoolingTime": "0 s", "beame": 0.5, "Co-60 (Bq)": 200.0, "H-3 (Bq)": 20.0},
+        {"_tdecay_s": 86400.0, "CoolingTime": "1 d", "beame": 0.5, "Co-60 (Bq)": 160.0, "H-3 (Bq)": 16.0},
+    ]
+
+
+def test_build_pivot_sheet_creates_pivot_sheet(tmp_path):
+    output = tmp_path / "pivot_test.xlsx"
+    with pd.ExcelWriter(str(output), engine="openpyxl") as writer:
+        _build_pivot_sheet(
+            writer,
+            summary_rows=_make_summary_rows_simple(),
+            param_names=["beame"],
+            group_by=None,
+            volume=2.0,
+        )
+
+    wb = load_workbook(output)
+    assert "Pivot" in wb.sheetnames
+
+
+def test_build_pivot_sheet_bq_values_present(tmp_path):
+    output = tmp_path / "pivot_test.xlsx"
+    with pd.ExcelWriter(str(output), engine="openpyxl") as writer:
+        _build_pivot_sheet(
+            writer,
+            summary_rows=_make_summary_rows_simple(),
+            param_names=["beame"],
+            group_by=None,
+            volume=2.0,
+        )
+
+    wb = load_workbook(output)
+    ws = wb["Pivot"]
+    flat = [cell.value for row in ws.iter_rows() for cell in row]
+    assert 100.0 in flat   # Co-60 Bq at beame=0.1, 0 s
+    assert 200.0 in flat   # Co-60 Bq at beame=0.5, 0 s
+
+
+def test_build_pivot_sheet_normalized_values_present(tmp_path):
+    output = tmp_path / "pivot_test.xlsx"
+    with pd.ExcelWriter(str(output), engine="openpyxl") as writer:
+        _build_pivot_sheet(
+            writer,
+            summary_rows=_make_summary_rows_simple(),
+            param_names=["beame"],
+            group_by=None,
+            volume=2.0,
+        )
+
+    wb = load_workbook(output)
+    ws = wb["Pivot"]
+    flat = [cell.value for row in ws.iter_rows() for cell in row]
+    # 100.0 / 2.0 = 50.0 and 200.0 / 2.0 = 100.0
+    assert any(abs(v - 50.0) < 1e-6 for v in flat if isinstance(v, float))
+    assert any(abs(v - 100.0) < 1e-6 for v in flat if isinstance(v, float))
+
+
+def test_build_pivot_sheet_title_row(tmp_path):
+    output = tmp_path / "pivot_test.xlsx"
+    with pd.ExcelWriter(str(output), engine="openpyxl") as writer:
+        _build_pivot_sheet(
+            writer,
+            summary_rows=_make_summary_rows_simple(),
+            param_names=["beame"],
+            group_by=None,
+            volume=2.0,
+        )
+
+    wb = load_workbook(output)
+    ws = wb["Pivot"]
+    assert ws.cell(row=1, column=1).value == "Activity (Bq)"
+
+
+def test_build_pivot_sheet_cooling_time_order(tmp_path):
+    """0 s must appear before 1 d in the sheet regardless of input order."""
+    rows_reversed = [
+        {"_tdecay_s": 86400.0, "CoolingTime": "1 d", "beame": 0.1, "Co-60 (Bq)": 80.0},
+        {"_tdecay_s": 0.0,     "CoolingTime": "0 s", "beame": 0.1, "Co-60 (Bq)": 100.0},
+    ]
+    output = tmp_path / "pivot_order.xlsx"
+    with pd.ExcelWriter(str(output), engine="openpyxl") as writer:
+        _build_pivot_sheet(
+            writer,
+            summary_rows=rows_reversed,
+            param_names=["beame"],
+            group_by=None,
+            volume=1.0,
+        )
+
+    wb = load_workbook(output)
+    ws = wb["Pivot"]
+    # CoolingTime values are in column 2 (index level 1)
+    col2 = [ws.cell(row=r, column=2).value for r in range(1, ws.max_row + 1)]
+    idx_zero = next((i for i, v in enumerate(col2) if v == "0 s"), None)
+    idx_one  = next((i for i, v in enumerate(col2) if v == "1 d"), None)
+    assert idx_zero is not None and idx_one is not None
+    assert idx_zero < idx_one
+
+
+def test_build_pivot_sheet_empty_rows_does_nothing(tmp_path):
+    output = tmp_path / "pivot_empty.xlsx"
+    with pd.ExcelWriter(str(output), engine="openpyxl") as writer:
+        pd.DataFrame({"x": [1]}).to_excel(writer, sheet_name="dummy", index=False)
+        _build_pivot_sheet(
+            writer,
+            summary_rows=[],
+            param_names=["beame"],
+            group_by=None,
+            volume=1.0,
+        )
+
+    wb = load_workbook(output)
+    assert "Pivot" not in wb.sheetnames
+
+
+def test_build_pivot_sheet_group_by_titles(tmp_path):
+    rows = [
+        {"_tdecay_s": 0.0, "CoolingTime": "0 s", "mat": "GALLIUM",  "beame": 0.5, "Co-60 (Bq)": 100.0},
+        {"_tdecay_s": 0.0, "CoolingTime": "0 s", "mat": "TUNGSTEN", "beame": 0.5, "Co-60 (Bq)": 50.0},
+    ]
+    output = tmp_path / "pivot_grouped.xlsx"
+    with pd.ExcelWriter(str(output), engine="openpyxl") as writer:
+        _build_pivot_sheet(
+            writer,
+            summary_rows=rows,
+            param_names=["mat", "beame"],
+            group_by="mat",
+            volume=1.0,
+        )
+
+    wb = load_workbook(output)
+    ws = wb["Pivot"]
+    flat = [cell.value for row in ws.iter_rows() for cell in row]
+    assert "mat=GALLIUM" in flat
+    assert "mat=TUNGSTEN" in flat
+
+
+def test_build_pivot_sheet_group_by_values(tmp_path):
+    rows = [
+        {"_tdecay_s": 0.0, "CoolingTime": "0 s", "mat": "GALLIUM",  "beame": 0.5, "Co-60 (Bq)": 100.0},
+        {"_tdecay_s": 0.0, "CoolingTime": "0 s", "mat": "TUNGSTEN", "beame": 0.5, "Co-60 (Bq)": 50.0},
+    ]
+    output = tmp_path / "pivot_grouped_vals.xlsx"
+    with pd.ExcelWriter(str(output), engine="openpyxl") as writer:
+        _build_pivot_sheet(
+            writer,
+            summary_rows=rows,
+            param_names=["mat", "beame"],
+            group_by="mat",
+            volume=1.0,
+        )
+
+    wb = load_workbook(output)
+    ws = wb["Pivot"]
+    flat = [cell.value for row in ws.iter_rows() for cell in row]
+    assert 100.0 in flat
+    assert 50.0 in flat

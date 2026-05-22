@@ -400,8 +400,9 @@ def test_build_pivot_sheet_normalized_values_present(tmp_path):
     ws = wb["Pivot"]
     flat = [cell.value for row in ws.iter_rows() for cell in row]
     # 100.0 / 2.0 = 50.0 and 200.0 / 2.0 = 100.0
-    assert any(abs(v - 50.0) < 1e-6 for v in flat if isinstance(v, float))
-    assert any(abs(v - 100.0) < 1e-6 for v in flat if isinstance(v, float))
+    # openpyxl may read whole-number floats back as int, so accept both
+    assert any(abs(v - 50.0) < 1e-6 for v in flat if isinstance(v, (int, float)))
+    assert any(abs(v - 100.0) < 1e-6 for v in flat if isinstance(v, (int, float)))
 
 
 def test_build_pivot_sheet_title_row(tmp_path):

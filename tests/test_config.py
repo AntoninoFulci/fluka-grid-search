@@ -2,7 +2,7 @@ from pathlib import Path
 import pytest
 import yaml
 from unittest.mock import patch
-from grid_search.config import load_config, Config, FlukaConfig, GridConfig, ExecutionConfig, validate_config
+from grid_search.config import load_config, Config, FlukaConfig, GridConfig, ExecutionConfig, validate_config, IsotopeConfig
 
 
 RAW = {
@@ -82,9 +82,6 @@ def test_validate_config_fluka_not_found(tmp_path):
         mock_run.side_effect = FileNotFoundError
         with pytest.raises(RuntimeError, match="fluka-config"):
             validate_config(cfg)
-
-
-from grid_search.config import IsotopeConfig
 
 
 def test_load_config_with_isotope_analysis():

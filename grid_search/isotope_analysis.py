@@ -117,6 +117,36 @@ def read_resnuclei_file(
     return row
 
 
+def _build_summary_sheet(
+    writer: pd.ExcelWriter,
+    summary_rows: list[dict],
+    volume: float,
+) -> None:
+    if not summary_rows:
+        return
+    sorted_rows = sorted(
+        summary_rows,
+        key=lambda r: (r["_tdecay_s"], str(r.get("CoolingTime", ""))),
+    )
+    bq_cols = [c for c in summary_rows[0] if c.endswith("(Bq)")]
+    meta_cols = [c for c in summary_rows[0] if not c.startswith("_") and not c.endswith("(Bq)")]
+
+    df_raw = pd.DataFrame(sorted_rows)[meta_cols + bq_cols]
+
+    df_norm = df_raw[meta_cols].copy()
+    for col in bq_cols:
+        df_norm[col.replace("(Bq)", "(Bq/cm³)")] = df_raw[col] / volume
+
+    sheet_name = "Summary"
+    n = len(df_raw)
+    df_raw.to_excel(writer, sheet_name=sheet_name, startrow=1, index=False)
+    df_norm.to_excel(writer, sheet_name=sheet_name, startrow=n + 4, index=False)
+
+    ws = writer.sheets[sheet_name]
+    ws.cell(row=1, column=1, value="Activity (Bq)")
+    ws.cell(row=n + 4, column=1, value=f"Normalized Activity (Bq/cm³) — volume: {volume} cm³")
+
+
 def run_isotope_analysis(
     output_dir: Path,
     config,
@@ -126,6 +156,8 @@ def run_isotope_analysis(
     ia = config.isotope_analysis
     combos = [combo] if combo else list(state.data.keys())
     sheets: dict[str, pd.DataFrame] = {}
+    isotope_syms = [isotope_symbol(z, a) for z, a in sorted(ia.isotopes.items())]
+    summary_rows: list[dict] = []
 
     for combo_name in combos:
         combo_data = state.data.get(combo_name)
@@ -138,6 +170,14 @@ def run_isotope_analysis(
             row = read_resnuclei_file(postproc_dir / rnc_file, ia.isotopes, params)
             if row is not None:
                 rows.append(row)
+                summary_row: dict = {
+                    "_tdecay_s": row["_tdecay_s"],
+                    "CoolingTime": row["CoolingTime"],
+                    **params,
+                }
+                for sym in isotope_syms:
+                    summary_row[f"{sym} (Bq)"] = row.get(f"{sym} (Bq)", 0.0)
+                summary_rows.append(summary_row)
         if rows:
             sheets[combo_name[:31]] = pd.DataFrame(rows).drop(columns=["_tdecay_s"], errors="ignore")
         else:
@@ -151,4 +191,5 @@ def run_isotope_analysis(
     with pd.ExcelWriter(str(output_path), engine="openpyxl") as writer:
         for sheet_name, df in sheets.items():
             df.to_excel(writer, sheet_name=sheet_name, index=False)
+        _build_summary_sheet(writer, summary_rows, ia.volume)
     print(f"[analyze] Written {output_path}")

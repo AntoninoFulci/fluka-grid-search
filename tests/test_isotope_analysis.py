@@ -238,3 +238,103 @@ def test_tdecay_s_not_in_combo_sheets(tmp_path):
 
     df = pd.read_excel(tmp_path / "isotopes.xlsx", sheet_name="beame0.05_matGALLIUM")
     assert "_tdecay_s" not in df.columns
+
+
+def test_summary_sheet_is_last_sheet(tmp_path):
+    ia = IsotopeConfig(isotopes={27: 60}, rnc_files=["merged_21"], volume=5.0)
+    config = MagicMock()
+    config.isotope_analysis = ia
+
+    state = StateManager(tmp_path / "state.json")
+    state.data = {"beame0.05_matGALLIUM": {"parameters": {"beame": 0.05}, "runs": {}}}
+
+    fake_row = {
+        "_tdecay_s": 86400.0,
+        "CoolingTime": "1.0 d",
+        "Parameters": "beame=0.05",
+        "Co-60 (Bq)": 1000.0,
+        "Co-60 (% Error)": 5.0,
+        "Co-60 (µg)": 0.42,
+    }
+
+    with patch("grid_search.isotope_analysis.read_resnuclei_file", return_value=fake_row):
+        run_isotope_analysis(tmp_path, config, state)
+
+    xl = pd.ExcelFile(tmp_path / "isotopes.xlsx")
+    assert xl.sheet_names[-1] == "Summary"
+
+
+def test_summary_sheet_bq_values(tmp_path):
+    ia = IsotopeConfig(isotopes={27: 60}, rnc_files=["merged_21"], volume=5.0)
+    config = MagicMock()
+    config.isotope_analysis = ia
+
+    state = StateManager(tmp_path / "state.json")
+    state.data = {"beame0.05_matGALLIUM": {"parameters": {"beame": 0.05}, "runs": {}}}
+
+    fake_row = {
+        "_tdecay_s": 86400.0,
+        "CoolingTime": "1.0 d",
+        "Parameters": "beame=0.05",
+        "Co-60 (Bq)": 1000.0,
+        "Co-60 (% Error)": 5.0,
+        "Co-60 (µg)": 0.42,
+    }
+
+    with patch("grid_search.isotope_analysis.read_resnuclei_file", return_value=fake_row):
+        run_isotope_analysis(tmp_path, config, state)
+
+    # Activity (Bq) title at sheet row 1; DataFrame header at sheet row 2 = pandas header index 1
+    df = pd.read_excel(tmp_path / "isotopes.xlsx", sheet_name="Summary", header=1)
+    assert "Co-60 (Bq)" in df.columns
+    assert df["Co-60 (Bq)"].iloc[0] == pytest.approx(1000.0)
+    assert "beame" in df.columns
+    assert df["beame"].iloc[0] == pytest.approx(0.05)
+
+
+def test_summary_sheet_normalized_values(tmp_path):
+    ia = IsotopeConfig(isotopes={27: 60}, rnc_files=["merged_21"], volume=5.0)
+    config = MagicMock()
+    config.isotope_analysis = ia
+
+    state = StateManager(tmp_path / "state.json")
+    state.data = {"beame0.05_matGALLIUM": {"parameters": {"beame": 0.05}, "runs": {}}}
+
+    fake_row = {
+        "_tdecay_s": 86400.0,
+        "CoolingTime": "1.0 d",
+        "Parameters": "beame=0.05",
+        "Co-60 (Bq)": 1000.0,
+        "Co-60 (% Error)": 5.0,
+        "Co-60 (µg)": 0.42,
+    }
+
+    with patch("grid_search.isotope_analysis.read_resnuclei_file", return_value=fake_row):
+        run_isotope_analysis(tmp_path, config, state)
+
+    # Find the "Normalized" title row, read the table immediately below it
+    df_full = pd.read_excel(
+        tmp_path / "isotopes.xlsx", sheet_name="Summary", header=None
+    )
+    norm_title_idx = df_full[
+        df_full.iloc[:, 0].astype(str).str.contains("Normalized", na=False)
+    ].index[0]
+    df_norm = pd.read_excel(
+        tmp_path / "isotopes.xlsx", sheet_name="Summary", header=norm_title_idx + 1
+    )
+    assert "Co-60 (Bq/cm³)" in df_norm.columns
+    assert df_norm["Co-60 (Bq/cm³)"].iloc[0] == pytest.approx(200.0)  # 1000.0 / 5.0
+
+
+def test_summary_sheet_absent_when_no_data(tmp_path):
+    ia = IsotopeConfig(isotopes={27: 60}, rnc_files=["merged_21"])
+    config = MagicMock()
+    config.isotope_analysis = ia
+
+    state = StateManager(tmp_path / "state.json")
+    state.data = {"beame0.05_matGALLIUM": {"parameters": {}, "runs": {}}}
+
+    with patch("grid_search.isotope_analysis.read_resnuclei_file", return_value=None):
+        run_isotope_analysis(tmp_path, config, state)
+
+    assert not (tmp_path / "isotopes.xlsx").exists()

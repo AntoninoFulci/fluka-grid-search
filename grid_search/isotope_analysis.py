@@ -70,6 +70,8 @@ def read_resnuclei_file(
         return None
 
     resn = Resnuclei(str(path))
+    if not resn.detector:
+        return None
     det = resn.detector[0]
     data = resn.read_data(0)
     stat = resn.read_stat(0)
@@ -95,8 +97,7 @@ def read_resnuclei_file(
                 bq_err = (edata[pos] * fdata[pos] * volume) if edata is not None else 0.0
                 lookup[(z_actual, a)] = (bq, bq_err)
 
-    tdecay = resn.tdecay
-    tdecay_s = tdecay[0] if isinstance(tdecay, tuple) else float(tdecay)
+    tdecay_s = float(resn.tdecay)
 
     row: dict = {
         "CoolingTime": format_decay_time(tdecay_s),

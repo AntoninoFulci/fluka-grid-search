@@ -96,7 +96,7 @@ def test_read_resnuclei_file_returns_known_isotope(tmp_path):
 
     mock_resn = MagicMock()
     mock_resn.detector = [det]
-    mock_resn.tdecay = (86400.0,)  # 1 day in seconds
+    mock_resn.tdecay = 86400.0  # 1 day in seconds
     mock_resn.read_data.return_value = fdata_bytes
     mock_resn.read_stat.return_value = (None, None, None, None, None, edata_bytes, None)
 
@@ -124,7 +124,7 @@ def test_read_resnuclei_file_isotope_not_present_gives_zero(tmp_path):
 
     mock_resn = MagicMock()
     mock_resn.detector = [det]
-    mock_resn.tdecay = (0.0,)
+    mock_resn.tdecay = 0.0
     mock_resn.read_data.return_value = fdata_bytes
     mock_resn.read_stat.return_value = (None, None, None, None, None, edata_bytes, None)
 

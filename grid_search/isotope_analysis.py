@@ -100,6 +100,7 @@ def read_resnuclei_file(
     tdecay_s = float(resn.tdecay)
 
     row: dict = {
+        "_tdecay_s": tdecay_s,
         "CoolingTime": format_decay_time(tdecay_s),
         "Parameters": " ".join(f"{k}={v}" for k, v in params.items()),
     }
@@ -138,7 +139,7 @@ def run_isotope_analysis(
             if row is not None:
                 rows.append(row)
         if rows:
-            sheets[combo_name[:31]] = pd.DataFrame(rows)
+            sheets[combo_name[:31]] = pd.DataFrame(rows).drop(columns=["_tdecay_s"], errors="ignore")
         else:
             print(f"[analyze] {combo_name}: no data found, skipping")
 

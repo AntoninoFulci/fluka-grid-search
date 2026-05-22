@@ -157,6 +157,7 @@ def test_run_isotope_analysis_writes_excel(tmp_path):
     }
 
     fake_row = {
+        "_tdecay_s": 86400.0,
         "CoolingTime": "1.0 d",
         "Parameters": "beame=0.05 mat=GALLIUM",
         "Co-60 (Bq)": 1000.0,
@@ -213,3 +214,27 @@ def test_run_isotope_analysis_combo_filter(tmp_path):
 
     assert len(calls) == 1
     assert "beame0.05_matGALLIUM" in calls[0]
+
+
+def test_tdecay_s_not_in_combo_sheets(tmp_path):
+    ia = IsotopeConfig(isotopes={27: 60}, rnc_files=["merged_21"])
+    config = MagicMock()
+    config.isotope_analysis = ia
+
+    state = StateManager(tmp_path / "state.json")
+    state.data = {"beame0.05_matGALLIUM": {"parameters": {}, "runs": {}}}
+
+    fake_row = {
+        "_tdecay_s": 86400.0,
+        "CoolingTime": "1.0 d",
+        "Parameters": "",
+        "Co-60 (Bq)": 1000.0,
+        "Co-60 (% Error)": 5.0,
+        "Co-60 (µg)": 0.42,
+    }
+
+    with patch("grid_search.isotope_analysis.read_resnuclei_file", return_value=fake_row):
+        run_isotope_analysis(tmp_path, config, state)
+
+    df = pd.read_excel(tmp_path / "isotopes.xlsx", sheet_name="beame0.05_matGALLIUM")
+    assert "_tdecay_s" not in df.columns

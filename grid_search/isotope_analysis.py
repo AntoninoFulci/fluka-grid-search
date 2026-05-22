@@ -159,16 +159,12 @@ def _build_pivot_sheet(
 
     sheet_name = "Pivot"
 
+    group_items: list[tuple[Optional[str], list[dict]]]
     if group_by is not None:
-        seen: list[str] = []
         buckets: dict[str, list[dict]] = {}
         for r in summary_rows:
-            v = str(r[group_by])
-            if v not in buckets:
-                seen.append(v)
-                buckets[v] = []
-            buckets[v].append(r)
-        group_items = [(v, buckets[v]) for v in seen]
+            buckets.setdefault(str(r[group_by]), []).append(r)
+        group_items = list(buckets.items())
         column_params = [p for p in param_names if p != group_by]
     else:
         group_items = [(None, summary_rows)]
@@ -177,11 +173,16 @@ def _build_pivot_sheet(
     if not column_params:
         return
 
-    excel_row = 1  # 1-indexed; startrow=N writes to Excel row N+1
+    # excel_row is 1-indexed (matches openpyxl ws.cell row arg).
+    # pd.to_excel startrow is 0-indexed, so startrow=excel_row writes
+    # the first header/data row at Excel row excel_row+1.
+    excel_row = 1
 
     for group_value, rows in group_items:
         df = pd.DataFrame(rows)
         bq_cols = [c for c in df.columns if c.endswith("(Bq)")]
+        if not bq_cols:
+            continue
 
         ct_order = (
             df[["_tdecay_s", "CoolingTime"]]

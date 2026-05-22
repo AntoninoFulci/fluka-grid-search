@@ -32,6 +32,7 @@ class IsotopeConfig:
     rnc_files: list[str]
     output: str = "isotopes.xlsx"
     volume: float = 1.0
+    pivot_group_by: Optional[str] = None
 
 
 @dataclass
@@ -59,6 +60,7 @@ def load_config(source: dict | Path) -> Config:
             rnc_files=list(ia_raw["rnc_files"]),
             output=ia_raw.get("output", "isotopes.xlsx"),
             volume=float(ia_raw.get("volume", 1.0)),
+            pivot_group_by=ia_raw.get("pivot_group_by"),
         )
 
     return Config(

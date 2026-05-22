@@ -140,3 +140,28 @@ def test_load_config_isotope_analysis_volume_default():
     }
     cfg = load_config(raw)
     assert cfg.isotope_analysis.volume == pytest.approx(1.0)
+
+
+def test_isotope_config_pivot_group_by_defaults_to_none():
+    raw = {
+        **RAW,
+        "isotope_analysis": {
+            "isotopes": {"27": "60"},
+            "rnc_files": ["merged_21"],
+        },
+    }
+    cfg = load_config(raw)
+    assert cfg.isotope_analysis.pivot_group_by is None
+
+
+def test_isotope_config_pivot_group_by_loaded():
+    raw = {
+        **RAW,
+        "isotope_analysis": {
+            "isotopes": {"27": "60"},
+            "rnc_files": ["merged_21"],
+            "pivot_group_by": "mat",
+        },
+    }
+    cfg = load_config(raw)
+    assert cfg.isotope_analysis.pivot_group_by == "mat"

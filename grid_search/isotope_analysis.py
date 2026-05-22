@@ -127,7 +127,7 @@ def run_isotope_analysis(
 
     for combo_name in combos:
         combo_data = state.data.get(combo_name)
-        if not combo_data:
+        if combo_data is None:
             continue
         params = combo_data.get("parameters", {})
         postproc_dir = output_dir / combo_name / "postproc"

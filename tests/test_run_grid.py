@@ -168,3 +168,35 @@ def test_postprocess_flag_calls_run_postprocessing(tmp_path):
     call_args = mock_pp.call_args[0]
     assert call_args[0] == results / combo
     assert call_args[2] == [run1]
+
+
+def test_analyze_flag_no_isotope_config_exits(tmp_path, capsys):
+    cfg_path = make_project(tmp_path)
+    results = tmp_path / "results"
+    results.mkdir(exist_ok=True)
+    (results / "state.json").write_text("{}")
+
+    with pytest.raises(SystemExit):
+        run_main([str(cfg_path), "--analyze"])
+
+    out = capsys.readouterr().out
+    assert "isotope_analysis" in out
+
+
+def test_analyze_flag_calls_run_isotope_analysis(tmp_path):
+    cfg_path = make_project(tmp_path)
+    cfg = yaml.safe_load(cfg_path.read_text())
+    cfg["isotope_analysis"] = {
+        "isotopes": {27: 60},
+        "rnc_files": ["merged_21"],
+    }
+    cfg_path.write_text(yaml.dump(cfg))
+
+    results = tmp_path / "results"
+    results.mkdir(exist_ok=True)
+    (results / "state.json").write_text("{}")
+
+    with patch("grid_search.isotope_analysis.run_isotope_analysis") as mock_analyze:
+        run_main([str(cfg_path), "--analyze"])
+
+    mock_analyze.assert_called_once()

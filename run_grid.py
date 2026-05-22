@@ -6,6 +6,7 @@ from pathlib import Path
 from grid_search.backends.task_spooler import TaskSpoolerBackend
 from grid_search.config import load_config, validate_config
 from grid_search.grid import combo_name, generate_combinations
+from grid_search.isotope_analysis import run_isotope_analysis
 from grid_search.state import StateManager
 from grid_search.workspace import create_run_workspace, generate_seed, patch_inp
 
@@ -16,6 +17,7 @@ def _parse_args():
     p.add_argument("config", type=Path)
     p.add_argument("--reset", action="store_true", help="Delete output dir and start fresh")
     p.add_argument("--postprocess", action="store_true", help="Re-run post-processing only")
+    p.add_argument("--analyze", action="store_true", help="Run isotope analysis on post-processed data")
     p.add_argument("--combo", help="Limit --postprocess to one combo")
     p.add_argument("--dry-run", action="store_true", help="Print commands without submitting")
     return p.parse_args()
@@ -42,12 +44,12 @@ def _submit_combo(params, config, rfluka_bin, backend, state, args):
         run_dir = create_run_workspace(config.output_dir, name, i)
         seed = generate_seed()
         inp_path = run_dir / f"simulation_{i:04d}.inp"
-        patch_inp(config.fluka.input, inp_path, params, seed)
+        patch_inp(config.fluka.input, inp_path, params, seed, config.fluka.primaries)
 
         cmd = [str(rfluka_bin / "rfluka"), "-M", "1"]
         if config.fluka.custom_executable:
             cmd += ["-e", config.fluka.custom_executable]
-        cmd.append(str(inp_path))
+        cmd.append(str(inp_path.resolve()))
 
         if args.dry_run:
             print(f"[dry-run] ts {' '.join(cmd)}")
@@ -96,11 +98,22 @@ def _do_postprocess(config, state, args):
         state.save()
 
 
+def _do_analyze(config, state, args):
+    if config.isotope_analysis is None:
+        print("Error: no isotope_analysis section in config")
+        sys.exit(1)
+    run_isotope_analysis(config.output_dir, config, state, combo=args.combo)
+
+
 def main() -> None:
     args = _parse_args()
 
     if args.reset and args.postprocess:
         print("Error: --reset and --postprocess are mutually exclusive")
+        sys.exit(1)
+
+    if args.reset and args.analyze:
+        print("Error: --reset and --analyze are mutually exclusive")
         sys.exit(1)
 
     config = load_config(args.config)
@@ -124,6 +137,10 @@ def main() -> None:
 
     if args.postprocess:
         _do_postprocess(config, state, args)
+        return
+
+    if args.analyze:
+        _do_analyze(config, state, args)
         return
 
     backend = TaskSpoolerBackend()

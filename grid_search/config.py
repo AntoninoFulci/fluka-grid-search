@@ -13,6 +13,7 @@ class FlukaConfig:
     custom_executable: Optional[str] = None
     rfluka_path: Optional[str] = None
     primaries: Optional[int] = None
+    use_dpm: bool = False
 
 
 @dataclass
@@ -75,6 +76,7 @@ def load_config(source: dict | Path) -> Config:
             custom_executable=raw["fluka"].get("custom_executable"),
             rfluka_path=raw["fluka"].get("rfluka_path"),
             primaries=raw["fluka"].get("primaries"),
+            use_dpm=bool(raw["fluka"].get("use_dpm", False)),
         ),
         output_dir=Path(raw["output"]["directory"]),
         grid=GridConfig(

@@ -16,6 +16,8 @@ dependencies = [
     "periodictable>=1.6",
     "radioactivedecay>=0.4",
     "numpy>=1.24",
+    "colorama>=0.4",
+    "tabulate>=0.9",
 ]
 
 [project.optional-dependencies]

@@ -54,7 +54,8 @@ def test_submits_correct_number_of_jobs(tmp_path):
         submitted.append(cmd)
         return r
 
-    with patch("subprocess.run", side_effect=fake_run):
+    with patch("builtins.input", return_value="yes"), \
+         patch("subprocess.run", side_effect=fake_run):
         run_main([str(cfg_path)])
 
     ts_submissions = [c for c in submitted if c[0] == "ts"]
@@ -73,7 +74,8 @@ def test_state_written_after_submit(tmp_path):
         r.returncode = 0
         return r
 
-    with patch("subprocess.run", side_effect=fake_run):
+    with patch("builtins.input", return_value="yes"), \
+         patch("subprocess.run", side_effect=fake_run):
         run_main([str(cfg_path)])
 
     state_file = tmp_path / "results" / "state.json"
@@ -102,7 +104,8 @@ def test_skips_done_combos(tmp_path):
         submitted.append(cmd)
         return r
 
-    with patch("subprocess.run", side_effect=fake_run):
+    with patch("builtins.input", return_value="yes"), \
+         patch("subprocess.run", side_effect=fake_run):
         run_main([str(cfg_path)])
 
     ts_submissions = [c for c in submitted if c[0] == "ts" and c[1] != "-S"]

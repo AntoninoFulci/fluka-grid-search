@@ -22,6 +22,46 @@ def _parse_args():
     return p.parse_args()
 
 
+def _print_summary(config, args, rfluka_bin) -> None:
+    from math import prod
+    from colorama import Fore, Style, init as colorama_init
+    from tabulate import tabulate
+
+    colorama_init(autoreset=True)
+    C, M, B, Y, G = Fore.CYAN, Fore.MAGENTA, Fore.BLUE, Fore.YELLOW, Fore.GREEN
+    RE = Style.RESET_ALL
+
+    n_combos = prod(len(v) for v in config.grid.parameters.values())
+    n_jobs = n_combos * config.grid.runs_per_combo
+
+    rows = [["Field", "Value"]]
+    rows.append([f"{C}Config{RE}",      f"{M}{args.config}{RE}"])
+    rows.append([f"{C}Input{RE}",       f"{M}{config.fluka.input}{RE}"])
+    rows.append([f"{C}Output dir{RE}",  f"{M}{config.output_dir}{RE}"])
+    rows.append([f"{C}rfluka bin{RE}",  f"{M}{rfluka_bin}{RE}"])
+    if config.fluka.custom_executable:
+        rows.append([f"{C}Custom exe{RE}", f"{M}{config.fluka.custom_executable}{RE}"])
+    if config.fluka.primaries:
+        rows.append([f"{C}Primaries{RE}",  f"{M}{config.fluka.primaries}{RE}"])
+    rows.append(["", ""])
+    for param, values in config.grid.parameters.items():
+        rows.append([f"{B}  {param}{RE}", f"{Y}{', '.join(str(v) for v in values)}{RE}"])
+    rows.append(["", ""])
+    rows.append([f"{C}Runs / combo{RE}", f"{M}{config.grid.runs_per_combo}{RE}"])
+    rows.append([f"{C}Max parallel{RE}", f"{M}{config.execution.max_parallel}{RE}"])
+    rows.append([f"{G}Total combos{RE}", f"{G}{n_combos}{RE}"])
+    rows.append([f"{G}Total jobs{RE}",   f"{G}{n_jobs}{RE}"])
+    rows.append([f"{Y}Dry run{RE}",      f"{Y}{args.dry_run}{RE}"])
+
+    print(tabulate(rows, headers="firstrow", tablefmt="simple_outline"))
+
+    if not args.dry_run:
+        confirm = input("Proceed with launching jobs? (yes/no): ")
+        if confirm.strip().lower() not in ("yes", "y"):
+            print("Aborted.")
+            sys.exit(0)
+
+
 def _resolve_rfluka(config) -> Path:
     import subprocess
     if config.fluka.rfluka_path:
@@ -151,6 +191,7 @@ def main() -> None:
     if not args.dry_run:
         backend.set_max_parallel(config.execution.max_parallel)
     rfluka_bin = _resolve_rfluka(config)
+    _print_summary(config, args, rfluka_bin)
 
     for params in generate_combinations(config.grid.parameters):
         name = combo_name(params)

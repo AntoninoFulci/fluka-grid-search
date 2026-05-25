@@ -1,3 +1,5 @@
+docs/
+tests/
 *.egg-info/
 __pycache__/
 *.pyc
@@ -7,7 +9,5 @@ __pycache__/
 results/
 **/.DS_Store
 test.yaml
-docs/
-tests/
 pyproject.toml
 

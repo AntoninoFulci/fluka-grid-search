@@ -39,6 +39,8 @@ def _print_summary(config, args, rfluka_bin) -> None:
     rows.append([f"{C}Input{RE}",       f"{M}{config.fluka.input}{RE}"])
     rows.append([f"{C}Output dir{RE}",  f"{M}{config.output_dir}{RE}"])
     rows.append([f"{C}rfluka bin{RE}",  f"{M}{rfluka_bin}{RE}"])
+    if config.fluka.use_dpm:
+        rows.append([f"{C}DPM mode{RE}", f"{M}enabled (flukadpm){RE}"])
     if config.fluka.custom_executable:
         rows.append([f"{C}Custom exe{RE}", f"{M}{config.fluka.custom_executable}{RE}"])
     if config.fluka.primaries:
@@ -86,7 +88,9 @@ def _submit_combo(params, config, rfluka_bin, backend, state, args):
         patch_inp(config.fluka.input, inp_path, params, seed, config.fluka.primaries)
 
         cmd = [str(rfluka_bin / "rfluka"), "-M", "1"]
-        if config.fluka.custom_executable:
+        if config.fluka.use_dpm:
+            cmd += ["-d"]
+        elif config.fluka.custom_executable:
             cmd += ["-e", config.fluka.custom_executable]
         cmd.append(str(inp_path.resolve()))
 

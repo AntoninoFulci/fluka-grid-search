@@ -112,3 +112,9 @@ def validate_config(config: Config) -> None:
             raise RuntimeError(
                 "fluka-config not found. Install FLUKA or set fluka.rfluka_path in config."
             ) from exc
+
+    if config.fluka.use_dpm and config.fluka.custom_executable:
+        raise ValueError(
+            "fluka.use_dpm and fluka.custom_executable are mutually exclusive. "
+            "Set only one."
+        )

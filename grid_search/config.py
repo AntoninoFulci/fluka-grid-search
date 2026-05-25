@@ -102,6 +102,12 @@ def validate_config(config: Config) -> None:
                 f"Parameter '{param}' not found as '#define {param}' in {config.fluka.input}"
             )
 
+    if config.fluka.use_dpm and config.fluka.custom_executable:
+        raise ValueError(
+            "fluka.use_dpm and fluka.custom_executable are mutually exclusive. "
+            "Set only one."
+        )
+
     if config.fluka.rfluka_path is None:
         try:
             subprocess.run(
@@ -112,9 +118,3 @@ def validate_config(config: Config) -> None:
             raise RuntimeError(
                 "fluka-config not found. Install FLUKA or set fluka.rfluka_path in config."
             ) from exc
-
-    if config.fluka.use_dpm and config.fluka.custom_executable:
-        raise ValueError(
-            "fluka.use_dpm and fluka.custom_executable are mutually exclusive. "
-            "Set only one."
-        )

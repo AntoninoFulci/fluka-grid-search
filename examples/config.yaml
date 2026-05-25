@@ -3,6 +3,7 @@ fluka:
   custom_executable: null
   rfluka_path: null
   primaries: 10000
+  use_dpm: false  # set true to use flukadpm (DPMJET/RQMD); mutually exclusive with custom_executable
 
 output:
   directory: results/

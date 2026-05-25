@@ -7,6 +7,7 @@ __pycache__/
 results/
 **/.DS_Store
 test.yaml
-docs/superpowers/
-docs/references/
-docs/plan.md
+docs/
+tests/
+pyproject.toml
+

@@ -36,7 +36,7 @@ pip install -e ".[dev]"
 
 ## Quick Start
 
-1. **Write a config file** (see `config.yaml` for an example):
+1. **Write a config file** (see `examples/config.yaml` for a template; copy your `.inp` file next to it):
 
 ```yaml
 fluka:
@@ -65,7 +65,7 @@ postprocessing:
 2. **Launch the grid**:
 
 ```bash
-python run_grid.py config.yaml
+python run_grid.py examples/config.yaml
 ```
 
 A summary table is printed; type `yes` to confirm before jobs are submitted.
@@ -73,25 +73,25 @@ A summary table is printed; type `yes` to confirm before jobs are submitted.
 3. **Dry run** (print commands only, no submission):
 
 ```bash
-python run_grid.py config.yaml --dry-run
+python run_grid.py examples/config.yaml --dry-run
 ```
 
 4. **Re-run post-processing** on already-completed data:
 
 ```bash
-python run_grid.py config.yaml --postprocess
+python run_grid.py examples/config.yaml --postprocess
 ```
 
 5. **Run isotope analysis** (requires an `isotope_analysis` section in config):
 
 ```bash
-python run_grid.py config.yaml --analyze
+python run_grid.py examples/config.yaml --analyze
 ```
 
 6. **Reset and start fresh**:
 
 ```bash
-python run_grid.py config.yaml --reset
+python run_grid.py examples/config.yaml --reset
 ```
 
 ---
@@ -101,8 +101,9 @@ python run_grid.py config.yaml --reset
 ```
 fluka-grid-search/
 ├── run_grid.py              # CLI entry point
-├── sentinel.py              # Submitted as a ts job; waits for runs then post-processes
-├── config.yaml              # Example configuration
+├── README.md
+├── examples/
+│   └── config.yaml          # Template configuration (copy your .inp file here)
 ├── grid_search/
 │   ├── config.py            # Config loading and validation
 │   ├── grid.py              # Parameter combination generation
@@ -111,10 +112,11 @@ fluka-grid-search/
 │   ├── postprocess.py       # Post-processing runner (usbsuw, usbrea, …)
 │   ├── resnuclei.py         # RESNUCLEi binary file reader
 │   ├── isotope_analysis.py  # Isotope activity analysis and Excel export
+│   ├── sentinel.py          # Submitted as a ts job; waits for runs then post-processes
 │   └── backends/
 │       ├── base.py          # Abstract backend interface
 │       └── task_spooler.py  # task-spooler backend
-└── tests/                   # pytest test suite (92 tests)
+└── tests/                   # pytest test suite (92 tests, local only)
 ```
 
 ---

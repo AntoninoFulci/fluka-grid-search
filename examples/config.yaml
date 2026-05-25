@@ -1,5 +1,5 @@
 fluka:
-  input: 2026-01-23_Frascati_V1.inp
+  input: simulation.inp  # place your FLUKA .inp file next to this config
   custom_executable: null
   rfluka_path: null
   primaries: 10000

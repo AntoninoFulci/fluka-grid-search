@@ -101,7 +101,7 @@ def _submit_combo(params, config, rfluka_bin, backend, state, args):
     if not args.dry_run:
         sentinel_cmd = [
             sys.executable,
-            str(Path(__file__).parent / "sentinel.py"),
+            str(Path(__file__).parent / "grid_search" / "sentinel.py"),
             str(args.config.resolve()),
             str(config.output_dir.resolve()),
             name,

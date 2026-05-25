@@ -47,9 +47,11 @@ class Config:
 
 def load_config(source: dict | Path) -> Config:
     if isinstance(source, Path):
+        config_dir = source.parent
         with open(source) as f:
             raw = yaml.safe_load(f)
     else:
+        config_dir = None
         raw = source
 
     ia_raw = raw.get("isotope_analysis")
@@ -63,9 +65,13 @@ def load_config(source: dict | Path) -> Config:
             pivot_group_by=ia_raw.get("pivot_group_by"),
         )
 
+    inp = Path(raw["fluka"]["input"])
+    if config_dir is not None and not inp.is_absolute():
+        inp = config_dir / inp
+
     return Config(
         fluka=FlukaConfig(
-            input=Path(raw["fluka"]["input"]),
+            input=inp,
             custom_executable=raw["fluka"].get("custom_executable"),
             rfluka_path=raw["fluka"].get("rfluka_path"),
             primaries=raw["fluka"].get("primaries"),

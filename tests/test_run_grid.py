@@ -47,7 +47,7 @@ def test_submits_correct_number_of_jobs(tmp_path):
     cfg_path = make_project(tmp_path)
     submitted = []
 
-    def fake_run(cmd, **kwargs):
+    def fake_run(cmd, **_kwargs):
         r = MagicMock()
         r.stdout = str(len(submitted)) + "\n"
         r.returncode = 0
@@ -66,7 +66,7 @@ def test_state_written_after_submit(tmp_path):
     cfg_path = make_project(tmp_path)
     job_counter = [0]
 
-    def fake_run(cmd, **kwargs):
+    def fake_run(cmd, **_kwargs):
         r = MagicMock()
         job_counter[0] += 1
         r.stdout = str(job_counter[0]) + "\n"
@@ -95,7 +95,7 @@ def test_skips_done_combos(tmp_path):
 
     submitted = []
 
-    def fake_run(cmd, **kwargs):
+    def fake_run(cmd, **_kwargs):
         r = MagicMock()
         r.stdout = str(len(submitted)) + "\n"
         r.returncode = 0

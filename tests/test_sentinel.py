@@ -54,11 +54,11 @@ def test_sentinel_waits_for_all_job_ids(tmp_path):
 
     waited = []
 
-    def fake_run(cmd, **kwargs):
+    def fake_run(cmd, **_kwargs):
         if cmd[:2] == ["ts", "-w"]:
             waited.append(cmd[2])
         r = MagicMock()
-        r.stdout = "E-Level: 0\n"
+        r.stdout = "Exit status: died with exit code 0\n"
         r.stderr = ""
         r.returncode = 0
         return r
@@ -74,9 +74,9 @@ def test_sentinel_marks_combo_done(tmp_path):
     make_state(tmp_path, combo, ["5"])
     cfg_path = make_config(tmp_path)
 
-    def fake_run(cmd, **kwargs):
+    def fake_run(cmd, **_kwargs):
         r = MagicMock()
-        r.stdout = "E-Level: 0\n"
+        r.stdout = "Exit status: died with exit code 0\n"
         r.stderr = ""
         r.returncode = 0
         return r
@@ -95,10 +95,10 @@ def test_sentinel_marks_combo_partial_on_failure(tmp_path):
 
     codes = {"5": 0, "6": 1}
 
-    def fake_run(cmd, **kwargs):
+    def fake_run(cmd, **_kwargs):
         r = MagicMock()
         if cmd[:2] == ["ts", "-i"]:
-            r.stdout = f"E-Level: {codes[cmd[2]]}\n"
+            r.stdout = f"Exit status: died with exit code {codes[cmd[2]]}\n"
         else:
             r.stdout = ""
         r.stderr = ""

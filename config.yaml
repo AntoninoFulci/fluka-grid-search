@@ -2,6 +2,7 @@ fluka:
   input: 2026-01-23_Frascati_V1.inp
   custom_executable: null
   rfluka_path: null
+  primaries: 10000
 
 output:
   directory: results/

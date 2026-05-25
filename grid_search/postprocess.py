@@ -20,7 +20,8 @@ def run_postprocessing(
         if not files:
             continue
 
-        stdin_input = "\n".join(str(f) for f in files) + "\n\n"
+        output_name = f"merged_{extension.lstrip('.')}"
+        stdin_input = "\n".join(str(f) for f in files) + "\n\n" + output_name + "\n"
         result = subprocess.run(
             [executable],
             input=stdin_input,

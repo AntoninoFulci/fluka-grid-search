@@ -3,5 +3,10 @@ __pycache__/
 *.pyc
 *.pyo
 .pytest_cache/
+.mypy_cache/
 results/
-*.DS_Store
+**/.DS_Store
+test.yaml
+docs/superpowers/
+docs/references/
+docs/plan.md

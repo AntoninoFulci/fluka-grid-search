@@ -2,6 +2,7 @@ from __future__ import annotations
 import random
 import re
 from pathlib import Path
+from typing import Optional
 
 
 def create_run_workspace(output_dir: Path, combo: str, run_idx: int) -> Path:
@@ -10,7 +11,13 @@ def create_run_workspace(output_dir: Path, combo: str, run_idx: int) -> Path:
     return run_dir
 
 
-def patch_inp(template: Path, output: Path, params: dict, seed: int) -> None:
+def patch_inp(
+    template: Path,
+    output: Path,
+    params: dict,
+    seed: int,
+    primaries: Optional[int] = None,
+) -> None:
     lines = template.read_text().splitlines(keepends=True)
     result = []
     for line in lines:
@@ -23,6 +30,8 @@ def patch_inp(template: Path, output: Path, params: dict, seed: int) -> None:
             )
         if re.match(r"^RANDOMIZ\s", patched):
             patched = f"RANDOMIZ          1.{seed:>10d}\n"
+        if primaries is not None and re.match(r"^START\s", patched):
+            patched = re.sub(r"^(START\s+)\S+", rf"\g<1>{primaries}.", patched)
         result.append(patched)
     output.write_text("".join(result))
 

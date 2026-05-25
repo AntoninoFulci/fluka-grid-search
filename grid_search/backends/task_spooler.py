@@ -1,4 +1,5 @@
 from __future__ import annotations
+import re
 import subprocess
 from pathlib import Path
 from .base import ExecutionBackend
@@ -19,12 +20,9 @@ class TaskSpoolerBackend(ExecutionBackend):
         result = subprocess.run(
             ["ts", "-i", job_id], capture_output=True, text=True,
         )
-        for line in result.stdout.splitlines():
-            if line.startswith("E-Level:"):
-                try:
-                    return int(line.split(":", 1)[1].strip())
-                except ValueError:
-                    return -1
+        match = re.search(r"exit code (\d+)", result.stdout)
+        if match:
+            return int(match.group(1))
         return -1
 
     def set_max_parallel(self, n: int) -> None:

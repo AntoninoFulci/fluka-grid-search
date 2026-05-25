@@ -1,0 +1,112 @@
+TITLE
+
+* beam-e in gev
+#define beame 0.5
+* current in p/s
+#define current 9.36E17
+#define mat GALLIUM
+#define rmat TUNGSTEN
+#define rzmin -7.7
+#define tzmax 5
+* Set the defaults for precision simulations
+DEFAULTS                                                              PRECISIO
+* Define the beam characteristics
+BEAM          $beame                                                  ELECTRON
+* Define the beam position
+BEAMPOS                             -20.
+GEOBEGIN                                                              COMBNAME
+    0    0          
+* Black body
+SPH blkbody    0.0 0.0 0.0 100000.0
+* Void sphere
+SPH void       0.0 0.0 0.0 100.0
+RPP target     -5.0 5.0 -5 5 -5 $tzmax
+RPP radiator   -5.0 5.0 -5.0 5.0 $rzmin -7.5
+END
+* Black hole
+BLKBODY      5 +blkbody -void
+* Void around
+VOID         5 +void -target -radiator
+TARGET       5 +target
+RADIATOR     5 +radiator
+END
+GEOEND
+MATERIAL                            6.44                              Ga2O3
+COMPOUND         2.0   GALLIUM       3.0    OXYGEN                    Ga2O3
+MATERIAL         83.               9.747                              BISMUTH
+MAT-PROP                           823.0   BISMUTH
+STERNHEI      6.3505    0.4152    3.8248    0.0941    3.1671      0.14BISMUTH
+* https://www.americanelements.com/bismuth-lead-alloy
+MATERIAL                           10.44                              PbBi
+COMPOUND       -60.0      LEAD     -40.0   BISMUTH                    PbBi
+MATERIAL         78.               21.45                              PLATINUM
+MATERIAL         92.               18.95                              URANIUM
+MATERIAL         90.               11.72                              THORIUM
+MATERIAL         88.                 5.0                              RADIUM
+MATERIAL         31.               5.904                              GALLIUM
+MATERIAL           6                2.26                              Graphite
+MATERIAL         23.                6.11                              VANADIUM
+MAT-PROP                           245.0  VANADIUM
+MAT-PROP        40.0                      VANADIUM                    DPA-ENER
+STERNHEI      4.2659    0.0691    3.0322   0.15436    3.0163      0.14VANADIUM
+MAT-PROP        31.0                      Graphite                    DPA-ENER
+MAT-PROP                           334.0   GALLIUM
+MAT-PROP        10.0                       GALLIUM                    DPA-ENER
+STERNHEI      4.9353    0.2267    3.5434    0.0944    3.1314      0.14GALLIUM
+MAT-PROP                           826.0    RADIUM
+STERNHEI      7.0452    0.5991    3.9428   0.08804    3.2454      0.14RADIUM
+MAT-PROP                           847.0   THORIUM
+STERNHEI      6.2473    0.4202    3.7681   0.08655     3.261      0.14THORIUM
+MAT-PROP                           890.0   URANIUM
+STERNHEI      5.8694     0.226    3.3721   0.19677    2.8171      0.14URANIUM
+MAT-PROP                           790.0  PLATINUM
+*MAT-PROP        42.0     -1.12      0.11  PLATINUM                    DPA-ENER
+STERNHEI      5.4732    0.1484    3.6212   0.11128    3.0417      0.12PLATINUM
+* ..+....1....+....2....+....3....+....4....+....5....+....6....+....7..
+ASSIGNMA    BLCKHOLE   BLKBODY
+ASSIGNMA      VACUUM      VOID
+ASSIGNMA        $mat    TARGET
+ASSIGNMA       $rmat  RADIATOR
+* Also enabled photonuclear reactions
+PHOTONUC           1                      BLCKHOLE  @LASTMAT          ELECTNUC
+MUPHOTON           1
+PHYSICS            1                                                  COALESCE
+PHYSICS            3                                                  EVAPORAT
+LAM-BIAS                  0.01              PHOTON
+LAM-BIAS                0.0001              PHOTON                    INEALL
+LOW-NEUT                                                             4
+LOW-PWXS          1.                      HYDROGEN  @LASTMAT
+RADDECAY           1         1         5       0.0   100001.
+* Dt is the year, p/s is the beam intensity (now 1year of beam @ 3mA)
+IRRPROFI       3600.  $current
+* Residue and doses @1h, 12h, 1d, 1w, 1y
+*DCYTIMES          0.     3600.    43200.    86400.   604800. 31557600.
+* Residue and doses @0, 1h, 1d, 1w, 2w, 3w
+DCYTIMES          0.     3600.    86400.   604800.  1209600.  1814400.
+* Set the random number seed
+RANDOMIZ         1.0
+* Resnuclei dcyscore
+DCYSCORE           1                          det0                    RESNUCLE
+DCYSCORE           3                          det1                    RESNUCLE
+DCYSCORE           4                          det2                    RESNUCLE
+*DCYSCORE           4                          det2                    RESNUCLE
+*DCYSCORE           5                          det3                    RESNUCLE
+*DCYSCORE           6                          det4                    RESNUCLE
+* Meshes around the cube
+USRBIN           10.   DOSE-EQ      -90.       50.       50.       50.doseeq
+USRBIN          -50.      -50.      -50.      100.      100.      100. &
+*AUXSCORE      USRBIN                        doseeq    doseeq          AMB74
+*USRBIN           10.   ARC-DPA      -90.       15.       15.       15.dpa
+*USRBIN          -15.      -15.      -15.      120.      120.      120. &
+*USRBIN           10.  ELECTRON      -75.       10.       10.       10.ele
+*USRBIN          -10.      -10.      -10.       50.       50.       50. &
+*USRBIN           10.    PHOTON      -75.       10.       10.       10.phot
+*USRBIN          -10.      -10.      -10.       50.       50.       50. &
+* NB: the volume is set for the cube
+* This scorer is for the yield nuc/pr
+RESNUCLE           3       -21       94.      140.    TARGET          det0
+RESNUCLE           3       -22       94.      140.    TARGET          det1
+RESNUCLE           3       -23       94.      140.    TARGET          det2
+* Set the number of primary histories to be simulated in the run
+START         10000.
+STOP

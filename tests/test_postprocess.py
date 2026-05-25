@@ -21,7 +21,8 @@ def test_run_postprocessing_stdin_format(tmp_path):
     stdin_input = call_kwargs[1]["input"]
     assert str(run1 / "sim001.21") in stdin_input
     assert str(run2 / "sim002.21") in stdin_input
-    assert stdin_input.endswith("\n\n")
+    assert "\n\n" in stdin_input  # empty line terminates file list
+    assert stdin_input.endswith("merged_21\n")  # output filename follows
 
     # Assert ordering: run1 file comes before run2 file since run1 sorts before run2
     idx1 = stdin_input.index(str(run1 / "sim001.21"))

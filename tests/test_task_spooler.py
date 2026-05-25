@@ -32,9 +32,9 @@ def test_wait_calls_ts_w():
     mock_run.assert_called_once_with(["ts", "-w", "7"], check=True)
 
 
-def test_get_exit_code_parses_e_level():
+def test_get_exit_code_parses_exit_code():
     backend = TaskSpoolerBackend()
-    ts_info = "ID: 5\nState: finished\nE-Level: 0\nTimes: 1.2/0.1/0.1\n"
+    ts_info = "Exit status: died with exit code 0\nCommand: rfluka ...\n"
     mock_result = MagicMock()
     mock_result.stdout = ts_info
     with patch("grid_search.backends.task_spooler.subprocess.run", return_value=mock_result):
@@ -44,7 +44,7 @@ def test_get_exit_code_parses_e_level():
 
 def test_get_exit_code_nonzero():
     backend = TaskSpoolerBackend()
-    ts_info = "ID: 6\nState: finished\nE-Level: 1\n"
+    ts_info = "Exit status: died with exit code 1\nCommand: rfluka ...\n"
     mock_result = MagicMock()
     mock_result.stdout = ts_info
     with patch("grid_search.backends.task_spooler.subprocess.run", return_value=mock_result):

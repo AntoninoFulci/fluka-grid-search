@@ -4,10 +4,12 @@ import sys
 from pathlib import Path
 
 from grid_search.backends.task_spooler import TaskSpoolerBackend
+from grid_search.backends import queue_adapter
 from grid_search.config import load_config, validate_config
 from grid_search.grid import combo_name, generate_combinations
 from grid_search.state import StateManager
-from grid_search.workspace import create_run_workspace, generate_seed, patch_inp
+from grid_search.workspace import create_run_workspace, patch_inp
+from grid_search.seeds import scan_used_seeds, next_seed, find_duplicate_seeds
 
 
 def _parse_args():
@@ -19,6 +21,8 @@ def _parse_args():
     p.add_argument("--analyze", action="store_true", help="Run isotope analysis on post-processed data")
     p.add_argument("--combo", help="Limit --postprocess to one combo")
     p.add_argument("--dry-run", action="store_true", help="Print commands without submitting")
+    p.add_argument("--check-seeds", action="store_true",
+                   help="Audit the output dir for duplicate RANDOMIZ seeds and exit")
     return p.parse_args()
 
 
@@ -78,45 +82,84 @@ def _submit_combo(params, config, rfluka_bin, backend, state, args):
     name = combo_name(params)
     n_runs = config.grid.runs_per_combo
     state.init_combo(name, params, n_runs)
-    job_ids = []
 
+    # Phase 1: prepare every run (dir + patched .inp + unique seed)
+    used = scan_used_seeds(config.output_dir)
+    prepared = []  # (run_idx, run_name, run_dir, inp_path)
     for i in range(1, n_runs + 1):
         run_name = f"run_{i:04d}"
         run_dir = create_run_workspace(config.output_dir, name, i)
-        seed = generate_seed()
+        seed = next_seed(used)
         inp_path = run_dir / f"simulation_{i:04d}.inp"
         patch_inp(config.fluka.input, inp_path, params, seed, config.fluka.primaries)
+        prepared.append((i, run_name, run_dir, inp_path))
 
-        cmd = [str(rfluka_bin / "rfluka"), "-M", "1"]
-        if config.fluka.use_dpm:
-            cmd += ["-d"]
-        elif config.fluka.custom_executable:
-            cmd += ["-e", config.fluka.custom_executable]
-        cmd.append(str(inp_path.resolve()))
+    # Phase 2: abort if any duplicate seed exists on disk
+    dups = find_duplicate_seeds(config.output_dir)
+    if dups:
+        for seed, files in sorted(dups.items()):
+            shared = ", ".join(f"{f.parent.parent.name}/{f.parent.name}" for f in files)
+            print(f"[error] duplicate seed {seed} shared by: {shared}")
+        sys.exit(f"[error] {name}: duplicate RANDOMIZ seeds detected, submission aborted.")
 
-        if args.dry_run:
-            print(f"[dry-run] ts {' '.join(cmd)}")
-        else:
-            job_id = backend.submit(cmd, run_dir)
-            state.set_run_submitted(name, run_name, job_id)
-            job_ids.append(job_id)
+    # Phase 3: submit
+    if config.execution.backend == "ts":
+        job_ids = []
+        for i, run_name, run_dir, inp_path in prepared:
+            cmd = [str(rfluka_bin / "rfluka"), "-M", "1"]
+            if config.fluka.use_dpm:
+                cmd += ["-d"]
+            elif config.fluka.custom_executable:
+                cmd += ["-e", config.fluka.custom_executable]
+            cmd.append(str(inp_path.resolve()))
+
+            if args.dry_run:
+                print(f"[dry-run] ts {' '.join(cmd)}")
+            else:
+                job_id = backend.submit(cmd, run_dir)
+                state.set_run_submitted(name, run_name, job_id)
+                job_ids.append(job_id)
+                state.save()
+
+        if not args.dry_run:
+            sentinel_cmd = [
+                sys.executable,
+                str(Path(__file__).parent / "grid_search" / "sentinel.py"),
+                str(args.config.resolve()),
+                str(config.output_dir.resolve()),
+                name,
+            ] + job_ids
+            sentinel_id = backend.submit(sentinel_cmd, Path.cwd())
+            state.set_sentinel(name, sentinel_id)
+            state.set_combo_status(name, "submitted")
             state.save()
-
-    if not args.dry_run:
-        sentinel_cmd = [
-            sys.executable,
-            str(Path(__file__).parent / "grid_search" / "sentinel.py"),
-            str(args.config.resolve()),
-            str(config.output_dir.resolve()),
-            name,
-        ] + job_ids
-        sentinel_id = backend.submit(sentinel_cmd, Path.cwd())
-        state.set_sentinel(name, sentinel_id)
-        state.set_combo_status(name, "submitted")
-        state.save()
-        print(f"Submitted {name}: {n_runs} runs + sentinel (job {sentinel_id})")
+            print(f"Submitted {name}: {n_runs} runs + sentinel (job {sentinel_id})")
+        else:
+            print(f"[dry-run] sentinel for {name}")
     else:
-        print(f"[dry-run] sentinel for {name}")
+        # Cluster backends: submit-only, no sentinel. rfluka_bin is the FLUKA bin dir.
+        for i, run_name, run_dir, inp_path in prepared:
+            job_id = queue_adapter.submit_run(
+                backend_name=config.execution.backend,
+                config=config,
+                run_dir=run_dir,
+                inp_filename=inp_path.name,
+                iteration=i,
+                fluka_bin=str(rfluka_bin),
+                dry_run=args.dry_run,
+            )
+            if not args.dry_run:
+                state.set_run_submitted(name, run_name, job_id)
+                state.save()
+            print(f"[{config.execution.backend}] {name}/{run_name}: {job_id}")
+        if not args.dry_run:
+            state.set_combo_status(name, "submitted")
+            state.save()
+        print(
+            f"Submitted {name}: {n_runs} runs via {config.execution.backend} "
+            f"(submit-only). Run `python run_grid.py <config> --postprocess` "
+            f"after the jobs finish."
+        )
 
 
 def _do_postprocess(config, state, args):
@@ -167,6 +210,18 @@ def main() -> None:
     config = load_config(args.config)
     validate_config(config)
 
+    if args.check_seeds:
+        dups = find_duplicate_seeds(config.output_dir)
+        if dups:
+            for seed, files in sorted(dups.items()):
+                shared = ", ".join(
+                    f"{f.parent.parent.name}/{f.parent.name}" for f in files
+                )
+                print(f"duplicate seed {seed}: {shared}")
+            sys.exit(f"{len(dups)} duplicate seed(s) found in {config.output_dir}")
+        print(f"No duplicate seeds in {config.output_dir}")
+        return
+
     if args.reset:
         import shutil
         if config.output_dir.exists():
@@ -191,10 +246,14 @@ def main() -> None:
         _do_analyze(config, state, args)
         return
 
-    backend = TaskSpoolerBackend()
-    if not args.dry_run:
-        backend.set_max_parallel(config.execution.max_parallel)
+    backend_name = config.execution.backend
     rfluka_bin = _resolve_rfluka(config)
+    if backend_name == "ts":
+        backend = TaskSpoolerBackend()
+        if not args.dry_run:
+            backend.set_max_parallel(config.execution.max_parallel)
+    else:
+        backend = None
     _print_summary(config, args, rfluka_bin)
 
     for params in generate_combinations(config.grid.parameters):
@@ -204,7 +263,7 @@ def main() -> None:
             print(f"Skipping {name} (already done)")
             continue
         if status in ("submitted", "running", "postprocessing"):
-            print(f"Skipping {name} (already in progress, sentinel running)")
+            print(f"Skipping {name} (already submitted / in progress)")
             continue
         _submit_combo(params, config, rfluka_bin, backend, state, args)
 

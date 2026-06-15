@@ -1,0 +1,26 @@
+fluka:
+  input: my_simulation.inp
+  primaries: 10000
+
+output:
+  directory: results/
+
+grid:
+  parameters:
+    beame: [0.05, 0.1, 0.5]
+    mat: [GALLIUM, TUNGSTEN]
+  runs_per_combo: 5
+
+execution:
+  backend: slurm        # ts | slurm | lsf | condor
+  max_parallel: 4       # ts only
+  queue: production     # slurm partition / lsf queue / condor universe
+  mem: "2000"
+  time: "2-00:00:00"    # slurm/lsf
+  ntasks: 1
+  nodes: 1
+  gres: "disk:1G"       # slurm only
+
+postprocessing:
+  ".21":
+    executable: usbsuw

@@ -211,7 +211,6 @@ def main() -> None:
     validate_config(config)
 
     if args.check_seeds:
-        from grid_search.seeds import find_duplicate_seeds
         dups = find_duplicate_seeds(config.output_dir)
         if dups:
             for seed, files in sorted(dups.items()):

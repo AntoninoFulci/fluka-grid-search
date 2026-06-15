@@ -21,6 +21,8 @@ def _parse_args():
     p.add_argument("--analyze", action="store_true", help="Run isotope analysis on post-processed data")
     p.add_argument("--combo", help="Limit --postprocess to one combo")
     p.add_argument("--dry-run", action="store_true", help="Print commands without submitting")
+    p.add_argument("--check-seeds", action="store_true",
+                   help="Audit the output dir for duplicate RANDOMIZ seeds and exit")
     return p.parse_args()
 
 
@@ -207,6 +209,19 @@ def main() -> None:
 
     config = load_config(args.config)
     validate_config(config)
+
+    if args.check_seeds:
+        from grid_search.seeds import find_duplicate_seeds
+        dups = find_duplicate_seeds(config.output_dir)
+        if dups:
+            for seed, files in sorted(dups.items()):
+                shared = ", ".join(
+                    f"{f.parent.parent.name}/{f.parent.name}" for f in files
+                )
+                print(f"duplicate seed {seed}: {shared}")
+            sys.exit(f"{len(dups)} duplicate seed(s) found in {config.output_dir}")
+        print(f"No duplicate seeds in {config.output_dir}")
+        return
 
     if args.reset:
         import shutil

@@ -35,6 +35,7 @@ def _build_namespace(backend_name: str, config, dry_run: bool) -> Namespace:
         return Namespace(
             dry_run=dry_run, queue=queue, mem=ex.mem, ncpu=ex.ncpu, disk=ex.disk,
             time=ex.condor_max_runtime, transfer_files="yes",
+            # NOTE: keep in sync with FlukaQueueSub HTCondorBackend.add_args defaults
             output="job_$(Cluster)_$(Process).out",
             error="job_$(Cluster)_$(Process).err",
             log="job_$(Cluster)_$(Process).log",

@@ -7,7 +7,8 @@ from grid_search.backends.task_spooler import TaskSpoolerBackend
 from grid_search.config import load_config, validate_config
 from grid_search.grid import combo_name, generate_combinations
 from grid_search.state import StateManager
-from grid_search.workspace import create_run_workspace, generate_seed, patch_inp
+from grid_search.workspace import create_run_workspace, patch_inp
+from grid_search.seeds import scan_used_seeds, next_seed, find_duplicate_seeds
 
 
 def _parse_args():
@@ -78,15 +79,29 @@ def _submit_combo(params, config, rfluka_bin, backend, state, args):
     name = combo_name(params)
     n_runs = config.grid.runs_per_combo
     state.init_combo(name, params, n_runs)
-    job_ids = []
 
+    # Phase 1: prepare every run (dir + patched .inp + unique seed)
+    used = scan_used_seeds(config.output_dir)
+    prepared = []  # (run_idx, run_name, run_dir, inp_path)
     for i in range(1, n_runs + 1):
         run_name = f"run_{i:04d}"
         run_dir = create_run_workspace(config.output_dir, name, i)
-        seed = generate_seed()
+        seed = next_seed(used)
         inp_path = run_dir / f"simulation_{i:04d}.inp"
         patch_inp(config.fluka.input, inp_path, params, seed, config.fluka.primaries)
+        prepared.append((i, run_name, run_dir, inp_path))
 
+    # Phase 2: abort if any duplicate seed exists on disk
+    dups = find_duplicate_seeds(config.output_dir)
+    if dups:
+        for seed, files in sorted(dups.items()):
+            shared = ", ".join(f"{f.parent.parent.name}/{f.parent.name}" for f in files)
+            print(f"[error] duplicate seed {seed} shared by: {shared}")
+        sys.exit(f"[error] {name}: duplicate RANDOMIZ seeds detected, submission aborted.")
+
+    # Phase 3: submit (TS path — submit runs + sentinel)
+    job_ids = []
+    for i, run_name, run_dir, inp_path in prepared:
         cmd = [str(rfluka_bin / "rfluka"), "-M", "1"]
         if config.fluka.use_dpm:
             cmd += ["-d"]

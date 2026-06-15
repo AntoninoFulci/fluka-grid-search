@@ -18,6 +18,8 @@ _DEFAULT_QUEUE = {"slurm": "production", "lsf": "normal", "condor": "vanilla"}
 
 
 def _build_namespace(backend_name: str, config, dry_run: bool) -> Namespace:
+    if backend_name not in _DEFAULT_QUEUE:
+        raise ValueError(f"Unknown cluster backend: {backend_name!r}")
     ex = config.execution
     queue = ex.queue or _DEFAULT_QUEUE[backend_name]
     if backend_name == "slurm":
@@ -37,7 +39,6 @@ def _build_namespace(backend_name: str, config, dry_run: bool) -> Namespace:
             error="job_$(Cluster)_$(Process).err",
             log="job_$(Cluster)_$(Process).log",
         )
-    raise ValueError(f"Unknown cluster backend: {backend_name!r}")
 
 
 def submit_run(

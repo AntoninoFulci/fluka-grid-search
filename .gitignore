@@ -1,4 +1,4 @@
-docs/
+docs/references/
 tests/
 *.egg-info/
 __pycache__/

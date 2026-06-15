@@ -233,15 +233,13 @@ def main() -> None:
         return
 
     backend_name = config.execution.backend
+    rfluka_bin = _resolve_rfluka(config)
     if backend_name == "ts":
         backend = TaskSpoolerBackend()
         if not args.dry_run:
             backend.set_max_parallel(config.execution.max_parallel)
-        rfluka_bin = _resolve_rfluka(config)
     else:
         backend = None
-        from core.fluka import detect_fluka_path
-        rfluka_bin = Path(detect_fluka_path()[0])
     _print_summary(config, args, rfluka_bin)
 
     for params in generate_combinations(config.grid.parameters):
@@ -251,7 +249,7 @@ def main() -> None:
             print(f"Skipping {name} (already done)")
             continue
         if status in ("submitted", "running", "postprocessing"):
-            print(f"Skipping {name} (already in progress, sentinel running)")
+            print(f"Skipping {name} (already submitted / in progress)")
             continue
         _submit_combo(params, config, rfluka_bin, backend, state, args)
 

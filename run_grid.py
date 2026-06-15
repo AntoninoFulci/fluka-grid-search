@@ -4,6 +4,7 @@ import sys
 from pathlib import Path
 
 from grid_search.backends.task_spooler import TaskSpoolerBackend
+from grid_search.backends import queue_adapter
 from grid_search.config import load_config, validate_config
 from grid_search.grid import combo_name, generate_combinations
 from grid_search.state import StateManager
@@ -99,39 +100,64 @@ def _submit_combo(params, config, rfluka_bin, backend, state, args):
             print(f"[error] duplicate seed {seed} shared by: {shared}")
         sys.exit(f"[error] {name}: duplicate RANDOMIZ seeds detected, submission aborted.")
 
-    # Phase 3: submit (TS path — submit runs + sentinel)
-    job_ids = []
-    for i, run_name, run_dir, inp_path in prepared:
-        cmd = [str(rfluka_bin / "rfluka"), "-M", "1"]
-        if config.fluka.use_dpm:
-            cmd += ["-d"]
-        elif config.fluka.custom_executable:
-            cmd += ["-e", config.fluka.custom_executable]
-        cmd.append(str(inp_path.resolve()))
+    # Phase 3: submit
+    if config.execution.backend == "ts":
+        job_ids = []
+        for i, run_name, run_dir, inp_path in prepared:
+            cmd = [str(rfluka_bin / "rfluka"), "-M", "1"]
+            if config.fluka.use_dpm:
+                cmd += ["-d"]
+            elif config.fluka.custom_executable:
+                cmd += ["-e", config.fluka.custom_executable]
+            cmd.append(str(inp_path.resolve()))
 
-        if args.dry_run:
-            print(f"[dry-run] ts {' '.join(cmd)}")
-        else:
-            job_id = backend.submit(cmd, run_dir)
-            state.set_run_submitted(name, run_name, job_id)
-            job_ids.append(job_id)
+            if args.dry_run:
+                print(f"[dry-run] ts {' '.join(cmd)}")
+            else:
+                job_id = backend.submit(cmd, run_dir)
+                state.set_run_submitted(name, run_name, job_id)
+                job_ids.append(job_id)
+                state.save()
+
+        if not args.dry_run:
+            sentinel_cmd = [
+                sys.executable,
+                str(Path(__file__).parent / "grid_search" / "sentinel.py"),
+                str(args.config.resolve()),
+                str(config.output_dir.resolve()),
+                name,
+            ] + job_ids
+            sentinel_id = backend.submit(sentinel_cmd, Path.cwd())
+            state.set_sentinel(name, sentinel_id)
+            state.set_combo_status(name, "submitted")
             state.save()
-
-    if not args.dry_run:
-        sentinel_cmd = [
-            sys.executable,
-            str(Path(__file__).parent / "grid_search" / "sentinel.py"),
-            str(args.config.resolve()),
-            str(config.output_dir.resolve()),
-            name,
-        ] + job_ids
-        sentinel_id = backend.submit(sentinel_cmd, Path.cwd())
-        state.set_sentinel(name, sentinel_id)
-        state.set_combo_status(name, "submitted")
-        state.save()
-        print(f"Submitted {name}: {n_runs} runs + sentinel (job {sentinel_id})")
+            print(f"Submitted {name}: {n_runs} runs + sentinel (job {sentinel_id})")
+        else:
+            print(f"[dry-run] sentinel for {name}")
     else:
-        print(f"[dry-run] sentinel for {name}")
+        # Cluster backends: submit-only, no sentinel. rfluka_bin is the FLUKA bin dir.
+        for i, run_name, run_dir, inp_path in prepared:
+            job_id = queue_adapter.submit_run(
+                backend_name=config.execution.backend,
+                config=config,
+                run_dir=run_dir,
+                inp_filename=inp_path.name,
+                iteration=i,
+                fluka_bin=str(rfluka_bin),
+                dry_run=args.dry_run,
+            )
+            if not args.dry_run:
+                state.set_run_submitted(name, run_name, job_id)
+                state.save()
+            print(f"[{config.execution.backend}] {name}/{run_name}: {job_id}")
+        if not args.dry_run:
+            state.set_combo_status(name, "submitted")
+            state.save()
+        print(
+            f"Submitted {name}: {n_runs} runs via {config.execution.backend} "
+            f"(submit-only). Run `python run_grid.py <config> --postprocess` "
+            f"after the jobs finish."
+        )
 
 
 def _do_postprocess(config, state, args):
@@ -206,10 +232,16 @@ def main() -> None:
         _do_analyze(config, state, args)
         return
 
-    backend = TaskSpoolerBackend()
-    if not args.dry_run:
-        backend.set_max_parallel(config.execution.max_parallel)
-    rfluka_bin = _resolve_rfluka(config)
+    backend_name = config.execution.backend
+    if backend_name == "ts":
+        backend = TaskSpoolerBackend()
+        if not args.dry_run:
+            backend.set_max_parallel(config.execution.max_parallel)
+        rfluka_bin = _resolve_rfluka(config)
+    else:
+        backend = None
+        from core.fluka import detect_fluka_path
+        rfluka_bin = Path(detect_fluka_path()[0])
     _print_summary(config, args, rfluka_bin)
 
     for params in generate_combinations(config.grid.parameters):

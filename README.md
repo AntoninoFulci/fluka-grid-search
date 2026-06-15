@@ -96,6 +96,36 @@ python run_grid.py examples/config.yaml --reset
 
 ---
 
+## Cluster backends (SLURM / LSF / HTCondor)
+
+Submission is delegated to the bundled FlukaQueueSub submodule (`external/FlukaQueueSub`). Select the backend in the config:
+
+```yaml
+execution:
+  backend: slurm   # ts (default) | slurm | lsf | condor
+  queue: production
+  mem: "2000"
+  time: "2-00:00:00"
+```
+
+- **Task Spooler (`ts`)** — the default. Submits runs, then a sentinel job that waits for the combo to finish and runs post-processing automatically.
+- **Cluster backends (`slurm`/`lsf`/`condor`)** — submit-only. After the jobs finish, run post-processing manually:
+
+```bash
+python run_grid.py config_slurm.yaml --postprocess
+python run_grid.py config_slurm.yaml --analyze
+```
+
+**Seed uniqueness** is enforced across the whole grid for every backend. Audit at any time:
+
+```bash
+python run_grid.py config.yaml --check-seeds
+```
+
+**Limitation:** `fluka.use_dpm` is supported only with the `ts` backend.
+
+---
+
 ## Project Layout
 
 ```

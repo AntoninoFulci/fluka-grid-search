@@ -1,3 +1,6 @@
 [submodule "external/FlukaQueueSub"]
 	path = external/FlukaQueueSub
 	url = https://github.com/AntoninoFulci/FlukaQueueSub.git
+[submodule "external/FlukaIsotopeAnalysis"]
+	path = external/FlukaIsotopeAnalysis
+	url = https://github.com/AntoninoFulci/FlukaIsotopeAnalysis.git

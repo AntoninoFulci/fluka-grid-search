@@ -163,8 +163,7 @@ fluka-grid-search/
 │   ├── workspace.py         # Per-run directory setup, .inp patching, seed generation
 │   ├── state.py             # JSON-backed state manager (resume support)
 │   ├── postprocess.py       # Post-processing runner (usbsuw, usbrea, …)
-│   ├── resnuclei.py         # RESNUCLEi binary file reader
-│   ├── isotope_analysis.py  # Isotope activity analysis and Excel export
+│   ├── grid_isotope.py      # Grid Excel export (per-combo/summary/pivot); reads RESNUCLEi via FlukaIsotopeAnalysis submodule
 │   ├── sentinel.py          # Submitted as a ts job; waits for runs then post-processes
 │   └── backends/
 │       ├── base.py          # Abstract backend interface

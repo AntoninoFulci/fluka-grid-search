@@ -185,7 +185,7 @@ def _do_postprocess(config, state, args):
 
 
 def _do_analyze(config, state, args):
-    from grid_search.isotope_analysis import run_isotope_analysis
+    from grid_search.grid_isotope import run_isotope_analysis
     if config.isotope_analysis is None:
         print("Error: no isotope_analysis section in config")
         sys.exit(1)

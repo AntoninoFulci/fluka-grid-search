@@ -32,6 +32,29 @@ pip install -e .
 pip install -e ".[dev]"
 ```
 
+### Submodules
+
+This project uses two git submodules under `external/`:
+
+- `FlukaQueueSub` — multi-backend job submission
+- `FlukaIsotopeAnalysis` — RESNUCLEi isotope/activation analysis
+
+Clone with submodules and install them editable:
+
+```bash
+git clone --recurse-submodules <repo-url>
+cd fluka-grid-search
+pip install -e .
+pip install -e external/FlukaQueueSub
+pip install -e external/FlukaIsotopeAnalysis
+```
+
+For a standalone single-simulation analysis (no grid), use the tool directly:
+
+```bash
+python external/FlukaIsotopeAnalysis/run_analysis.py analysis.yaml
+```
+
 ---
 
 ## Quick Start

@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fluka-grid-search"
+version = "0.1.0"
+description = "Run FLUKA Monte Carlo simulations over a parameter grid (task-spooler / cluster backends)"
+requires-python = ">=3.11"
+dependencies = [
+    "pyyaml>=6.0",
+    "pandas>=2.0",
+    "openpyxl>=3.1",
+    "colorama>=0.4",
+    "tabulate>=0.9",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+# RESNUCLEi isotope analysis is provided by the FlukaIsotopeAnalysis submodule and
+# job submission by the FlukaQueueSub submodule. Both are installed editable from
+# external/ (see README) and are not published on PyPI, so they are not listed here.
+
+[tool.setuptools]
+py-modules = ["run_grid"]
+packages = ["grid_search", "grid_search.backends"]

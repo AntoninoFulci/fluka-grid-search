@@ -9,5 +9,4 @@ __pycache__/
 results/
 **/.DS_Store
 test.yaml
-pyproject.toml
 configs/

@@ -1,20 +1,24 @@
 # fluka-grid-search
 
-A Python tool for running FLUKA Monte Carlo simulations over a parameter grid, built on top of [task-spooler](https://vicerveza.homelinux.net/~viric/soft/ts/) (`ts`).
+A Python tool that generates FLUKA Monte Carlo input files over a parameter grid
+and submits them to the farm via [FlukaQueueSub](https://github.com/AntoninoFulci/FlukaQueueSub).
 
-It generates all parameter combinations, patches each FLUKA input file, submits independent runs to `ts`, and runs a *sentinel* job that waits for all runs in a combo to finish before triggering post-processing.
+It generates all parameter combinations, patches each FLUKA input file with unique
+random seeds, and submits the independent runs through FlukaQueueSub (task-spooler or
+a cluster scheduler). **Queue monitoring, post-processing and isotope analysis are
+not handled here** — monitoring/submission lives in FlukaQueueSub, and RESNUCLEi
+post-processing + isotope analysis live in
+[FlukaIsotopeAnalysis](https://github.com/AntoninoFulci/FlukaIsotopeAnalysis).
 
 ---
 
 ## Features
 
-- **Grid search**: define any number of parameters with lists of values; every combination is run automatically
+- **Grid search**: define any number of parameters with lists of values; every combination is generated automatically
 - **Multiple runs per combo**: configurable number of statistically independent runs (different random seeds)
-- **Task spooler integration**: parallelism is controlled via `ts`; no cluster required
-- **Automatic post-processing**: runs `usbsuw`, `usbrea`, or any FLUKA post-processing executable after each combo completes
-- **Isotope analysis**: reads `RESNUCLEi` binary files, computes activity and decay data, and writes an Excel workbook with per-isotope summaries and pivot tables
-- **Resumable**: state is persisted in `state.json`; re-running skips already-completed combos
-- **Dry-run mode**: prints all commands without submitting
+- **Unique seeds**: `RANDOMIZ` seeds are unique across the whole grid; duplicates abort submission and can be audited with `--check-seeds`
+- **Multi-backend submission**: delegates to FlukaQueueSub (`ts` / `slurm` / `lsf` / `condor`)
+- **Dry-run mode**: prints what would be submitted without submitting
 
 ---
 
@@ -22,24 +26,17 @@ It generates all parameter combinations, patches each FLUKA input file, submits 
 
 - Python ≥ 3.11
 - FLUKA (with `rfluka` on `PATH` or configured via `rfluka_path`)
-- [task-spooler](https://vicerveza.homelinux.net/~viric/soft/ts/) (`ts` command)
-
-Install Python dependencies:
-
-```bash
-pip install -e .
-# or for development:
-pip install -e ".[dev]"
-```
+- FlukaQueueSub submodule (provides the submission backends)
+- For the `ts` backend: [task-spooler](https://vicerveza.homelinux.net/~viric/soft/ts/) (`ts` command)
 
 ### Submodules
 
 This project uses two git submodules under `external/`:
 
-- `FlukaQueueSub` — multi-backend job submission
-- `FlukaIsotopeAnalysis` — RESNUCLEi isotope/activation analysis
+- `FlukaQueueSub` — multi-backend job submission (used at submit time)
+- `FlukaIsotopeAnalysis` — RESNUCLEi post-processing + isotope/activation analysis (used after jobs finish)
 
-Clone with submodules and install them editable:
+Clone with submodules and install everything editable:
 
 ```bash
 git clone --recurse-submodules <repo-url>
@@ -47,9 +44,12 @@ cd fluka-grid-search
 pip install -e .
 pip install -e external/FlukaQueueSub
 pip install -e external/FlukaIsotopeAnalysis
+# for development:
+pip install -e ".[dev]"
 ```
 
-For a standalone single-simulation analysis (no grid), use the tool directly:
+After the jobs finish, post-process and analyse a simulation directory with the
+standalone tool:
 
 ```bash
 python external/FlukaIsotopeAnalysis/run_analysis.py analysis.yaml
@@ -76,16 +76,11 @@ grid:
   runs_per_combo: 5           # independent runs per combination
 
 execution:
-  max_parallel: 4             # ts concurrency limit
-
-postprocessing:
-  ".21":
-    executable: usbsuw
-  ".22":
-    executable: usbrea
+  backend: ts                 # ts (default) | slurm | lsf | condor
+  max_parallel: 4             # ts slot count (local concurrency)
 ```
 
-2. **Launch the grid**:
+2. **Launch the grid** (generate inputs + submit):
 
 ```bash
 python run_grid.py examples/config.yaml
@@ -93,25 +88,19 @@ python run_grid.py examples/config.yaml
 
 A summary table is printed; type `yes` to confirm before jobs are submitted.
 
-3. **Dry run** (print commands only, no submission):
+3. **Dry run** (print what would be submitted, no submission):
 
 ```bash
 python run_grid.py examples/config.yaml --dry-run
 ```
 
-4. **Re-run post-processing** on already-completed data:
+4. **Audit seeds** for duplicates:
 
 ```bash
-python run_grid.py examples/config.yaml --postprocess
+python run_grid.py examples/config.yaml --check-seeds
 ```
 
-5. **Run isotope analysis** (requires an `isotope_analysis` section in config):
-
-```bash
-python run_grid.py examples/config.yaml --analyze
-```
-
-6. **Reset and start fresh**:
+5. **Reset and start fresh** (deletes the output directory):
 
 ```bash
 python run_grid.py examples/config.yaml --reset
@@ -119,9 +108,9 @@ python run_grid.py examples/config.yaml --reset
 
 ---
 
-## Cluster backends (SLURM / LSF / HTCondor)
+## Backends (ts / SLURM / LSF / HTCondor)
 
-Submission is delegated to the bundled FlukaQueueSub submodule (`external/FlukaQueueSub`). Select the backend in the config:
+All submission is delegated to the FlukaQueueSub submodule. Select the backend in the config:
 
 ```yaml
 execution:
@@ -131,21 +120,14 @@ execution:
   time: "2-00:00:00"
 ```
 
-- **Task Spooler (`ts`)** — the default. Submits runs, then a sentinel job that waits for the combo to finish and runs post-processing automatically.
-- **Cluster backends (`slurm`/`lsf`/`condor`)** — submit-only. After the jobs finish, run post-processing manually:
+Every backend is **submit-only** from this tool's perspective: `run_grid.py` generates
+the input files and hands each run to FlukaQueueSub. Waiting for jobs, status, and
+post-processing are FlukaQueueSub / FlukaIsotopeAnalysis concerns.
 
-```bash
-python run_grid.py config_slurm.yaml --postprocess
-python run_grid.py config_slurm.yaml --analyze
-```
+**Seed uniqueness** is enforced across the whole grid for every backend.
 
-**Seed uniqueness** is enforced across the whole grid for every backend. Audit at any time:
-
-```bash
-python run_grid.py config.yaml --check-seeds
-```
-
-**Limitation:** `fluka.use_dpm` is supported only with the `ts` backend.
+**Limitation:** `fluka.use_dpm` is currently rejected — the FlukaQueueSub backends do
+not emit `rfluka -d`. Add DPM support to FlukaQueueSub to restore it.
 
 ---
 
@@ -153,22 +135,22 @@ python run_grid.py config.yaml --check-seeds
 
 ```
 fluka-grid-search/
-├── run_grid.py              # CLI entry point
+├── run_grid.py              # CLI entry point: generate inputs + submit
 ├── README.md
+├── pyproject.toml
 ├── examples/
 │   └── config.yaml          # Template configuration (copy your .inp file here)
 ├── grid_search/
 │   ├── config.py            # Config loading and validation
 │   ├── grid.py              # Parameter combination generation
-│   ├── workspace.py         # Per-run directory setup, .inp patching, seed generation
-│   ├── state.py             # JSON-backed state manager (resume support)
-│   ├── postprocess.py       # Post-processing runner (usbsuw, usbrea, …)
-│   ├── grid_isotope.py      # Grid Excel export (per-combo/summary/pivot); reads RESNUCLEi via FlukaIsotopeAnalysis submodule
-│   ├── sentinel.py          # Submitted as a ts job; waits for runs then post-processes
+│   ├── workspace.py         # Per-run directory setup, .inp patching
+│   ├── seeds.py             # RANDOMIZ seed generation + duplicate audit
 │   └── backends/
-│       ├── base.py          # Abstract backend interface
-│       └── task_spooler.py  # task-spooler backend
-└── tests/                   # pytest test suite (92 tests, local only)
+│       └── queue_adapter.py # Adapter to FlukaQueueSub backends (ts/slurm/lsf/condor)
+├── external/
+│   ├── FlukaQueueSub/        # submodule: job submission
+│   └── FlukaIsotopeAnalysis/ # submodule: post-processing + isotope analysis
+└── tests/                   # pytest test suite (local only)
 ```
 
 ---

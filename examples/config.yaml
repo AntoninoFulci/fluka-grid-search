@@ -3,7 +3,7 @@ fluka:
   custom_executable: null
   rfluka_path: null
   primaries: 10000
-  use_dpm: false  # set true to use flukadpm (DPMJET/RQMD); mutually exclusive with custom_executable
+  # use_dpm: not supported — submission is delegated to FlukaQueueSub
 
 output:
   directory: results/
@@ -15,10 +15,5 @@ grid:
   runs_per_combo: 5
 
 execution:
-  max_parallel: 4
-
-postprocessing:
-  ".21":
-    executable: usbsuw
-  ".22":
-    executable: usbrea
+  backend: ts        # ts (default) | slurm | lsf | condor
+  max_parallel: 4    # ts slot count (local concurrency)

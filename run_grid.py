@@ -3,23 +3,21 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from grid_search.backends.task_spooler import TaskSpoolerBackend
 from grid_search.backends import queue_adapter
 from grid_search.config import load_config, validate_config
 from grid_search.grid import combo_name, generate_combinations
-from grid_search.state import StateManager
 from grid_search.workspace import create_run_workspace, patch_inp
 from grid_search.seeds import scan_used_seeds, next_seed, find_duplicate_seeds
 
 
 def _parse_args():
     import argparse
-    p = argparse.ArgumentParser(description="FLUKA grid search launcher")
+    p = argparse.ArgumentParser(
+        description="FLUKA grid search launcher: generate input files and submit them "
+                    "to the farm via FlukaQueueSub."
+    )
     p.add_argument("config", type=Path)
     p.add_argument("--reset", action="store_true", help="Delete output dir and start fresh")
-    p.add_argument("--postprocess", action="store_true", help="Re-run post-processing only")
-    p.add_argument("--analyze", action="store_true", help="Run isotope analysis on post-processed data")
-    p.add_argument("--combo", help="Limit --postprocess to one combo")
     p.add_argument("--dry-run", action="store_true", help="Print commands without submitting")
     p.add_argument("--check-seeds", action="store_true",
                    help="Audit the output dir for duplicate RANDOMIZ seeds and exit")
@@ -42,9 +40,8 @@ def _print_summary(config, args, rfluka_bin) -> None:
     rows.append([f"{C}Config{RE}",      f"{M}{args.config}{RE}"])
     rows.append([f"{C}Input{RE}",       f"{M}{config.fluka.input}{RE}"])
     rows.append([f"{C}Output dir{RE}",  f"{M}{config.output_dir}{RE}"])
+    rows.append([f"{C}Backend{RE}",     f"{M}{config.execution.backend}{RE}"])
     rows.append([f"{C}rfluka bin{RE}",  f"{M}{rfluka_bin}{RE}"])
-    if config.fluka.use_dpm:
-        rows.append([f"{C}DPM mode{RE}", f"{M}enabled (flukadpm){RE}"])
     if config.fluka.custom_executable:
         rows.append([f"{C}Custom exe{RE}", f"{M}{config.fluka.custom_executable}{RE}"])
     if config.fluka.primaries:
@@ -78,10 +75,15 @@ def _resolve_rfluka(config) -> Path:
     return Path(result.stdout.strip())
 
 
-def _submit_combo(params, config, rfluka_bin, backend, state, args):
+def _set_ts_slots(max_parallel: int) -> None:
+    """Set the task-spooler slot count (local concurrency) before submitting."""
+    import subprocess
+    subprocess.run(["ts", "-S", str(max_parallel)], check=False)
+
+
+def _submit_combo(params, config, rfluka_bin, args) -> None:
     name = combo_name(params)
     n_runs = config.grid.runs_per_combo
-    state.init_combo(name, params, n_runs)
 
     # Phase 1: prepare every run (dir + patched .inp + unique seed)
     used = scan_used_seeds(config.output_dir)
@@ -102,110 +104,28 @@ def _submit_combo(params, config, rfluka_bin, backend, state, args):
             print(f"[error] duplicate seed {seed} shared by: {shared}")
         sys.exit(f"[error] {name}: duplicate RANDOMIZ seeds detected, submission aborted.")
 
-    # Phase 3: submit
-    if config.execution.backend == "ts":
-        job_ids = []
-        for i, run_name, run_dir, inp_path in prepared:
-            cmd = [str(rfluka_bin / "rfluka"), "-M", "1"]
-            if config.fluka.use_dpm:
-                cmd += ["-d"]
-            elif config.fluka.custom_executable:
-                cmd += ["-e", config.fluka.custom_executable]
-            cmd.append(str(inp_path.resolve()))
-
-            if args.dry_run:
-                print(f"[dry-run] ts {' '.join(cmd)}")
-            else:
-                job_id = backend.submit(cmd, run_dir)
-                state.set_run_submitted(name, run_name, job_id)
-                job_ids.append(job_id)
-                state.save()
-
-        if not args.dry_run:
-            sentinel_cmd = [
-                sys.executable,
-                str(Path(__file__).parent / "grid_search" / "sentinel.py"),
-                str(args.config.resolve()),
-                str(config.output_dir.resolve()),
-                name,
-            ] + job_ids
-            sentinel_id = backend.submit(sentinel_cmd, Path.cwd())
-            state.set_sentinel(name, sentinel_id)
-            state.set_combo_status(name, "submitted")
-            state.save()
-            print(f"Submitted {name}: {n_runs} runs + sentinel (job {sentinel_id})")
-        else:
-            print(f"[dry-run] sentinel for {name}")
-    else:
-        # Cluster backends: submit-only, no sentinel. rfluka_bin is the FLUKA bin dir.
-        for i, run_name, run_dir, inp_path in prepared:
-            job_id = queue_adapter.submit_run(
-                backend_name=config.execution.backend,
-                config=config,
-                run_dir=run_dir,
-                inp_filename=inp_path.name,
-                iteration=i,
-                fluka_bin=str(rfluka_bin),
-                dry_run=args.dry_run,
-            )
-            if not args.dry_run:
-                state.set_run_submitted(name, run_name, job_id)
-                state.save()
-            print(f"[{config.execution.backend}] {name}/{run_name}: {job_id}")
-        if not args.dry_run:
-            state.set_combo_status(name, "submitted")
-            state.save()
-        print(
-            f"Submitted {name}: {n_runs} runs via {config.execution.backend} "
-            f"(submit-only). Run `python run_grid.py <config> --postprocess` "
-            f"after the jobs finish."
+    # Phase 3: submit every run via FlukaQueueSub (submit-only; no monitoring here)
+    for i, run_name, run_dir, inp_path in prepared:
+        job_id = queue_adapter.submit_run(
+            backend_name=config.execution.backend,
+            config=config,
+            run_dir=run_dir,
+            inp_filename=inp_path.name,
+            iteration=i,
+            fluka_bin=str(rfluka_bin),
+            dry_run=args.dry_run,
         )
+        print(f"[{config.execution.backend}] {name}/{run_name}: {job_id}")
 
-
-def _do_postprocess(config, state, args):
-    from grid_search.postprocess import run_postprocessing
-    combos = [args.combo] if args.combo else list(state.data.keys())
-    for name in combos:
-        combo_data = state.data.get(name)
-        if not combo_data:
-            print(f"[postprocess] {name}: not found in state, skipping")
-            continue
-        successful_runs = [
-            config.output_dir / name / run
-            for run, info in combo_data["runs"].items()
-            if info.get("exit_code", -1) == 0
-        ]
-        if not successful_runs:
-            print(f"[postprocess] {name}: no successful runs, skipping")
-            continue
-        print(f"[postprocess] {name}: processing {len(successful_runs)} runs...")
-        run_postprocessing(config.output_dir / name, config.postprocessing, successful_runs)
-        state.set_combo_status(name, "done")
-        state.save()
-
-
-def _do_analyze(config, state, args):
-    from grid_search.grid_isotope import run_isotope_analysis
-    if config.isotope_analysis is None:
-        print("Error: no isotope_analysis section in config")
-        sys.exit(1)
-    run_isotope_analysis(config.output_dir, config, state, combo=args.combo)
+    print(
+        f"Submitted {name}: {n_runs} runs via {config.execution.backend}. "
+        f"Monitoring, post-processing and analysis are handled by FlukaQueueSub / "
+        f"FlukaIsotopeAnalysis."
+    )
 
 
 def main() -> None:
     args = _parse_args()
-
-    if args.reset and args.postprocess:
-        print("Error: --reset and --postprocess are mutually exclusive")
-        sys.exit(1)
-
-    if args.reset and args.analyze:
-        print("Error: --reset and --analyze are mutually exclusive")
-        sys.exit(1)
-
-    if args.analyze and args.postprocess:
-        print("Error: --analyze and --postprocess are mutually exclusive")
-        sys.exit(1)
 
     config = load_config(args.config)
     validate_config(config)
@@ -233,39 +153,15 @@ def main() -> None:
             print(f"Deleted {config.output_dir}")
 
     config.output_dir.mkdir(parents=True, exist_ok=True)
-    state_file = config.output_dir / "state.json"
-    state = StateManager(state_file)
-    if state_file.exists():
-        state.load()
 
-    if args.postprocess:
-        _do_postprocess(config, state, args)
-        return
-
-    if args.analyze:
-        _do_analyze(config, state, args)
-        return
-
-    backend_name = config.execution.backend
     rfluka_bin = _resolve_rfluka(config)
-    if backend_name == "ts":
-        backend = TaskSpoolerBackend()
-        if not args.dry_run:
-            backend.set_max_parallel(config.execution.max_parallel)
-    else:
-        backend = None
     _print_summary(config, args, rfluka_bin)
 
+    if config.execution.backend == "ts" and not args.dry_run:
+        _set_ts_slots(config.execution.max_parallel)
+
     for params in generate_combinations(config.grid.parameters):
-        name = combo_name(params)
-        status = state.get_combo_status(name)
-        if status == "done":
-            print(f"Skipping {name} (already done)")
-            continue
-        if status in ("submitted", "running", "postprocessing"):
-            print(f"Skipping {name} (already submitted / in progress)")
-            continue
-        _submit_combo(params, config, rfluka_bin, backend, state, args)
+        _submit_combo(params, config, rfluka_bin, args)
 
 
 if __name__ == "__main__":

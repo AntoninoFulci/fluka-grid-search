@@ -1,4 +1,5 @@
 from __future__ import annotations
+import os
 from argparse import Namespace
 from pathlib import Path
 
@@ -7,8 +8,10 @@ from backends.base import JobInfo
 from backends.slurm import SlurmBackend
 from backends.lsf import LSFBackend
 from backends.htcondor import HTCondorBackend
+from backends.ts import TSBackend
 
-CLUSTER_BACKENDS = {
+BACKENDS = {
+    "ts": TSBackend,
     "slurm": SlurmBackend,
     "lsf": LSFBackend,
     "condor": HTCondorBackend,
@@ -18,8 +21,10 @@ _DEFAULT_QUEUE = {"slurm": "production", "lsf": "normal", "condor": "vanilla"}
 
 
 def _build_namespace(backend_name: str, config, dry_run: bool) -> Namespace:
+    if backend_name == "ts":
+        return Namespace(dry_run=dry_run)
     if backend_name not in _DEFAULT_QUEUE:
-        raise ValueError(f"Unknown cluster backend: {backend_name!r}")
+        raise ValueError(f"Unknown backend: {backend_name!r}")
     ex = config.execution
     queue = ex.queue or _DEFAULT_QUEUE[backend_name]
     if backend_name == "slurm":
@@ -51,10 +56,27 @@ def submit_run(
     fluka_bin: str,
     dry_run: bool,
 ) -> str:
-    """Submit one run via a FlukaQueueSub cluster backend. Returns the job-id string."""
-    backend = CLUSTER_BACKENDS[backend_name]()
+    """Submit one run via a FlukaQueueSub backend. Returns the job-id string."""
+    backend = BACKENDS[backend_name]()
     ns = _build_namespace(backend_name, config, dry_run)
     backend.validate(ns)
+
+    if backend_name == "ts":
+        # TSBackend runs `ts rfluka -M 1 <input>` in the process CWD, so run it
+        # from inside run_dir with an absolute input path (rfluka writes there).
+        job_info = JobInfo(
+            input_file=str((Path(run_dir) / inp_filename).resolve()),
+            iteration=iteration,
+            fluka_path=fluka_bin,
+            custom_exe=config.fluka.custom_executable,
+        )
+        cwd = os.getcwd()
+        os.chdir(run_dir)
+        try:
+            return backend.submit(None, job_info, ns)
+        finally:
+            os.chdir(cwd)
+
     job_info = JobInfo(
         input_file=inp_filename,
         iteration=iteration,

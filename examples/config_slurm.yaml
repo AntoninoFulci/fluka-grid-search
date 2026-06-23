@@ -20,7 +20,3 @@ execution:
   ntasks: 1
   nodes: 1
   gres: "disk:1G"       # slurm only
-
-postprocessing:
-  ".21":
-    executable: usbsuw

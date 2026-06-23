@@ -38,22 +38,11 @@ class ExecutionConfig:
 
 
 @dataclass
-class IsotopeConfig:
-    isotopes: dict[int, int]
-    rnc_files: list[str]
-    output: str = "isotopes.xlsx"
-    volume: float = 1.0
-    pivot_group_by: Optional[str] = None
-
-
-@dataclass
 class Config:
     fluka: FlukaConfig
     output_dir: Path
     grid: GridConfig
     execution: ExecutionConfig
-    postprocessing: dict[str, str]  # extension -> executable name
-    isotope_analysis: Optional[IsotopeConfig] = None
 
 
 def load_config(source: dict | Path) -> Config:
@@ -64,17 +53,6 @@ def load_config(source: dict | Path) -> Config:
     else:
         config_dir = None
         raw = source
-
-    ia_raw = raw.get("isotope_analysis")
-    isotope_analysis = None
-    if ia_raw:
-        isotope_analysis = IsotopeConfig(
-            isotopes={int(k): int(v) for k, v in ia_raw["isotopes"].items()},
-            rnc_files=list(ia_raw["rnc_files"]),
-            output=ia_raw.get("output", "isotopes.xlsx"),
-            volume=float(ia_raw.get("volume", 1.0)),
-            pivot_group_by=ia_raw.get("pivot_group_by"),
-        )
 
     inp = Path(raw["fluka"]["input"])
     if config_dir is not None and not inp.is_absolute():
@@ -106,11 +84,6 @@ def load_config(source: dict | Path) -> Config:
             disk=int(raw["execution"].get("disk", 100000)),
             condor_max_runtime=int(raw["execution"].get("condor_max_runtime", 86400)),
         ),
-        postprocessing={
-            ext: v["executable"]
-            for ext, v in raw.get("postprocessing", {}).items()
-        },
-        isotope_analysis=isotope_analysis,
     )
 
 
@@ -121,12 +94,6 @@ def validate_config(config: Config) -> None:
             raise ValueError(
                 f"Parameter '{param}' not found as '#define {param}' in {config.fluka.input}"
             )
-
-    if config.fluka.use_dpm and config.fluka.custom_executable:
-        raise ValueError(
-            "fluka.use_dpm and fluka.custom_executable are mutually exclusive. "
-            "Set only one."
-        )
 
     if config.fluka.rfluka_path is None:
         try:
@@ -146,8 +113,9 @@ def validate_config(config: Config) -> None:
             f"Valid: {sorted(valid_backends)}"
         )
 
-    if config.fluka.use_dpm and config.execution.backend != "ts":
+    if config.fluka.use_dpm:
         raise ValueError(
-            "fluka.use_dpm is only supported with the 'ts' backend; the cluster "
-            "backends cannot emit 'rfluka -d'. Disable use_dpm or use backend: ts."
+            "fluka.use_dpm is no longer supported: submission is delegated to "
+            "FlukaQueueSub, whose backends do not emit 'rfluka -d'. Add DPM support "
+            "to FlukaQueueSub if you need it, then remove this check."
         )

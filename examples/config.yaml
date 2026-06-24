@@ -1,19 +1,30 @@
+# fluka-grid-search — annotated example config (task-spooler backend)
+#
+# Run with:   python run_grid.py examples/config.yaml
+# Dry run:    python run_grid.py examples/config.yaml --dry-run
+#
+# The FLUKA template referenced by `fluka.input` must contain a `#define` line for
+# every grid parameter, plus `RANDOMIZ` and `START` cards (see the README, Step 1).
+
 fluka:
-  input: simulation.inp  # place your FLUKA .inp file next to this config
-  custom_executable: null
-  rfluka_path: null
-  primaries: 10000
-  # use_dpm: not supported — submission is delegated to FlukaQueueSub
+  input: simulation.inp     # FLUKA .inp template; relative paths resolve next to this file
+  primaries: 10000          # optional — overrides the START primary count
+  rfluka_path: null         # optional — FLUKA bin dir; null → discovered via `fluka-config --bin`
+  custom_executable: null   # optional — passed to rfluka as `-e <exe>`
 
 output:
-  directory: results/
+  directory: results/       # run dirs + patched inputs are written here
 
 grid:
-  parameters:
-    beame: [0.05, 0.1, 0.5]
+  parameters:               # each key MUST match a `#define <key>` in the template
+    beame: [0.05, 0.1, 0.5] # beam energy values
     mat: [GALLIUM, TUNGSTEN]
-  runs_per_combo: 5
+  runs_per_combo: 5         # independent runs per combination (each gets a unique seed)
 
 execution:
-  backend: ts        # ts (default) | slurm | lsf | condor
-  max_parallel: 4    # ts slot count (local concurrency)
+  backend: ts               # ts (default) | slurm | lsf | condor
+  max_parallel: 4           # ts slot count (local concurrency, `ts -S`)
+
+# Total jobs = 3 (beame) × 2 (mat) × 5 (runs_per_combo) = 30
+#
+# For a cluster backend (SLURM/LSF/HTCondor) see examples/config_slurm.yaml.

@@ -1,42 +1,45 @@
 # fluka-grid-search
 
-A Python tool that generates FLUKA Monte Carlo input files over a parameter grid
-and submits them to the farm via [FlukaQueueSub](https://github.com/AntoninoFulci/FlukaQueueSub).
+Generate FLUKA Monte Carlo input files over a parameter grid and submit them to the
+farm. This is the **front end** of a three-project workflow:
 
-It generates all parameter combinations, patches each FLUKA input file with unique
-random seeds, and submits the independent runs through FlukaQueueSub (task-spooler or
-a cluster scheduler). **Queue monitoring, post-processing and isotope analysis are
-not handled here** — monitoring/submission lives in FlukaQueueSub, and RESNUCLEi
-post-processing + isotope analysis live in
-[FlukaIsotopeAnalysis](https://github.com/AntoninoFulci/FlukaIsotopeAnalysis).
+| Project | Role |
+|---------|------|
+| **fluka-grid-search** (this repo) | generate input files for every parameter combination + submit them |
+| [FlukaQueueSub](https://github.com/AntoninoFulci/FlukaQueueSub) | submission backends (task-spooler / SLURM / LSF / HTCondor) + queue monitoring |
+| [FlukaIsotopeAnalysis](https://github.com/AntoninoFulci/FlukaIsotopeAnalysis) | post-process `RESNUCLEi` output + isotope/activation analysis to Excel |
 
----
-
-## Features
-
-- **Grid search**: define any number of parameters with lists of values; every combination is generated automatically
-- **Multiple runs per combo**: configurable number of statistically independent runs (different random seeds)
-- **Unique seeds**: `RANDOMIZ` seeds are unique across the whole grid; duplicates abort submission and can be audited with `--check-seeds`
-- **Multi-backend submission**: delegates to FlukaQueueSub (`ts` / `slurm` / `lsf` / `condor`)
-- **Dry-run mode**: prints what would be submitted without submitting
+This repo does **one job**: take a FLUKA `.inp` template, expand a parameter grid,
+patch each combination with unique random seeds, and hand the runs to FlukaQueueSub.
+Monitoring and analysis are the other two projects' jobs.
 
 ---
 
-## Requirements
+## Workflow at a glance
 
-- Python ≥ 3.11
-- FLUKA (with `rfluka` on `PATH` or configured via `rfluka_path`)
-- FlukaQueueSub submodule (provides the submission backends)
-- For the `ts` backend: [task-spooler](https://vicerveza.homelinux.net/~viric/soft/ts/) (`ts` command)
+```
+   config.yaml + template.inp
+              │
+              ▼
+   python run_grid.py config.yaml          (this repo: generate + submit)
+              │   creates results/<combo>/run_NNNN/simulation_NNNN.inp
+              │   and submits each run via FlukaQueueSub
+              ▼
+   jobs run on the farm                     (FlukaQueueSub backend: ts/slurm/lsf/condor)
+              │   each run produces RESNUCLEi binaries (fort.21, …)
+              ▼
+   python external/FlukaIsotopeAnalysis/run_analysis.py analysis.yaml
+                                            (FlukaIsotopeAnalysis: usrsuw + isotopes → .xlsx)
+```
 
-### Submodules
+---
 
-This project uses two git submodules under `external/`:
+## Install
 
-- `FlukaQueueSub` — multi-backend job submission (used at submit time)
-- `FlukaIsotopeAnalysis` — RESNUCLEi post-processing + isotope/activation analysis (used after jobs finish)
+Requires Python ≥ 3.11, FLUKA (`rfluka` on `PATH` or set via `rfluka_path`), and —
+for the `ts` backend — [task-spooler](https://vicerveza.homelinux.net/~viric/soft/ts/).
 
-Clone with submodules and install everything editable:
+Clone with submodules and install all three projects editable:
 
 ```bash
 git clone --recurse-submodules <repo-url>
@@ -44,87 +47,159 @@ cd fluka-grid-search
 pip install -e .
 pip install -e external/FlukaQueueSub
 pip install -e external/FlukaIsotopeAnalysis
-# for development:
+# for development (pytest):
 pip install -e ".[dev]"
 ```
 
-After the jobs finish, post-process and analyse a simulation directory with the
-standalone tool:
+Already cloned without `--recurse-submodules`? Run:
+
+```bash
+git submodule update --init --recursive
+```
+
+---
+
+## Step 1 — Prepare your FLUKA input template
+
+`run_grid.py` patches a normal FLUKA `.inp` file. The template must contain:
+
+- A `#define NAME value` line for **every** grid parameter (the value is replaced per combo):
+  ```
+  #define beame 0.1
+  #define mat   GALLIUM
+  ```
+- A `RANDOMIZ` card (rewritten per run with a unique seed):
+  ```
+  RANDOMIZ          1.0
+  ```
+- A `START` card (its primary count is overwritten when `fluka.primaries` is set):
+  ```
+  START         10000.
+  ```
+
+If a grid parameter has no matching `#define`, submission aborts with a clear error.
+
+---
+
+## Step 2 — Write the config
+
+See [`examples/config.yaml`](examples/config.yaml) for a fully annotated template, and
+[`examples/config_slurm.yaml`](examples/config_slurm.yaml) for a cluster example.
+
+```yaml
+fluka:
+  input: simulation.inp      # FLUKA .inp template (relative paths are resolved next to this config)
+  primaries: 10000           # optional: overrides the START primary count
+  rfluka_path: null          # optional: FLUKA bin dir; null → discovered via `fluka-config --bin`
+  custom_executable: null    # optional: passed to rfluka as `-e <exe>`
+
+output:
+  directory: results/        # where run dirs + patched inputs are written
+
+grid:
+  parameters:                # each key must match a `#define` in the template
+    beame: [0.05, 0.1, 0.5]
+    mat: [GALLIUM, TUNGSTEN]
+  runs_per_combo: 5          # statistically independent runs per combination (unique seeds)
+
+execution:
+  backend: ts                # ts (default) | slurm | lsf | condor
+  max_parallel: 4            # ts slot count (local concurrency)
+  # cluster-only fields (slurm/lsf/condor):
+  queue: production          # slurm partition / lsf queue / condor universe
+  mem: "2000"
+  time: "2-00:00:00"         # slurm/lsf wall time
+  ntasks: 1
+  nodes: 1                   # slurm
+  gres: "disk:1G"            # slurm
+  ncpu: 1                    # condor
+  disk: 100000               # condor request_disk (kB)
+  condor_max_runtime: 86400  # condor +MaxRuntime (s)
+```
+
+Total jobs submitted = (product of parameter list lengths) × `runs_per_combo`.
+
+---
+
+## Step 3 — Generate and submit
+
+```bash
+# Dry run: print what would be submitted, submit nothing
+python run_grid.py examples/config.yaml --dry-run
+
+# Real run: prints a summary table, asks for confirmation, then submits
+python run_grid.py examples/config.yaml
+
+# Audit the output dir for duplicate RANDOMIZ seeds
+python run_grid.py examples/config.yaml --check-seeds
+
+# Delete the output directory and start fresh (asks for confirmation)
+python run_grid.py examples/config.yaml --reset
+```
+
+### What it produces
+
+```
+results/
+└── beame0.05_matGALLIUM/         # one dir per parameter combination
+    ├── run_0001/
+    │   └── simulation_0001.inp    # patched template (combo values + unique seed)
+    ├── run_0002/
+    └── ...
+```
+
+Seeds are unique across the **whole** output directory; if a duplicate is detected,
+submission aborts before any job is sent.
+
+> **Note:** there is no resume/state tracking. Re-running submits everything again —
+> use `--reset` to start clean. Seed uniqueness is still guaranteed.
+
+---
+
+## Step 4 — Monitor (FlukaQueueSub)
+
+Job status, waiting, and queue management are handled by **FlukaQueueSub** (see its
+README). `run_grid.py` only submits; it does not wait or report progress.
+
+---
+
+## Step 5 — Post-process and analyse (FlukaIsotopeAnalysis)
+
+Once the runs finish, each produces `RESNUCLEi` binaries. Use the standalone tool to
+merge them (via `usrsuw`) and compute isotope activity into an Excel workbook:
 
 ```bash
 python external/FlukaIsotopeAnalysis/run_analysis.py analysis.yaml
 ```
 
----
-
-## Quick Start
-
-1. **Write a config file** (see `examples/config.yaml` for a template; copy your `.inp` file next to it):
+Example `analysis.yaml`:
 
 ```yaml
-fluka:
-  input: my_simulation.inp   # FLUKA input template
-  primaries: 10000
-
-output:
-  directory: results/
-
-grid:
-  parameters:
-    beame: [0.05, 0.1, 0.5]  # beam energy values
-    mat: [GALLIUM, TUNGSTEN]  # material names
-  runs_per_combo: 5           # independent runs per combination
-
-execution:
-  backend: ts                 # ts (default) | slurm | lsf | condor
-  max_parallel: 4             # ts slot count (local concurrency)
+analysis:
+  directory: results/beame0.05_matGALLIUM/run_0001  # folder with fort.21… and/or .rnc files
+  units: [21, 22, 23]                               # FLUKA RESNUCLEi unit numbers
+  volume: 1000                                      # cm³
+  isotopes:                                         # Z: A
+    31: 70
+    30: 69
+  output: isotopes.xlsx
 ```
 
-2. **Launch the grid** (generate inputs + submit):
-
-```bash
-python run_grid.py examples/config.yaml
-```
-
-A summary table is printed; type `yes` to confirm before jobs are submitted.
-
-3. **Dry run** (print what would be submitted, no submission):
-
-```bash
-python run_grid.py examples/config.yaml --dry-run
-```
-
-4. **Audit seeds** for duplicates:
-
-```bash
-python run_grid.py examples/config.yaml --check-seeds
-```
-
-5. **Reset and start fresh** (deletes the output directory):
-
-```bash
-python run_grid.py examples/config.yaml --reset
-```
+It auto-detects already-processed `.rnc` files (e.g. from FLAIR) and only runs `usrsuw`
+on raw units that need it. See the FlukaIsotopeAnalysis README for details.
 
 ---
 
-## Backends (ts / SLURM / LSF / HTCondor)
+## Backends
 
-All submission is delegated to the FlukaQueueSub submodule. Select the backend in the config:
+All submission is delegated to FlukaQueueSub. Choose via `execution.backend`:
 
-```yaml
-execution:
-  backend: slurm   # ts (default) | slurm | lsf | condor
-  queue: production
-  mem: "2000"
-  time: "2-00:00:00"
-```
-
-Every backend is **submit-only** from this tool's perspective: `run_grid.py` generates
-the input files and hands each run to FlukaQueueSub. Waiting for jobs, status, and
-post-processing are FlukaQueueSub / FlukaIsotopeAnalysis concerns.
-
-**Seed uniqueness** is enforced across the whole grid for every backend.
+| backend | notes |
+|---------|-------|
+| `ts` (default) | task-spooler; `max_parallel` sets the local slot count (`ts -S`) |
+| `slurm` | uses `queue`/`mem`/`time`/`ntasks`/`nodes`/`gres` |
+| `lsf` | uses `queue`/`mem`/`time`/`ntasks` |
+| `condor` | uses `queue`/`mem`/`ncpu`/`disk`/`condor_max_runtime` |
 
 **Limitation:** `fluka.use_dpm` is currently rejected — the FlukaQueueSub backends do
 not emit `rfluka -d`. Add DPM support to FlukaQueueSub to restore it.
@@ -136,28 +211,21 @@ not emit `rfluka -d`. Add DPM support to FlukaQueueSub to restore it.
 ```
 fluka-grid-search/
 ├── run_grid.py              # CLI entry point: generate inputs + submit
-├── README.md
 ├── pyproject.toml
 ├── examples/
-│   └── config.yaml          # Template configuration (copy your .inp file here)
+│   ├── config.yaml          # annotated ts example
+│   └── config_slurm.yaml    # cluster example
 ├── grid_search/
-│   ├── config.py            # Config loading and validation
-│   ├── grid.py              # Parameter combination generation
-│   ├── workspace.py         # Per-run directory setup, .inp patching
+│   ├── config.py            # config loading + validation
+│   ├── grid.py              # parameter combination generation
+│   ├── workspace.py         # per-run dir setup + .inp patching
 │   ├── seeds.py             # RANDOMIZ seed generation + duplicate audit
 │   └── backends/
-│       └── queue_adapter.py # Adapter to FlukaQueueSub backends (ts/slurm/lsf/condor)
-├── external/
-│   ├── FlukaQueueSub/        # submodule: job submission
-│   └── FlukaIsotopeAnalysis/ # submodule: post-processing + isotope analysis
-└── tests/                   # pytest test suite (local only)
+│       └── queue_adapter.py # adapter to FlukaQueueSub backends
+└── external/
+    ├── FlukaQueueSub/        # submodule: submission + monitoring
+    └── FlukaIsotopeAnalysis/ # submodule: post-processing + analysis
 ```
-
----
-
-## How Parameter Patching Works
-
-`run_grid.py` passes `parameters` as a dict to `patch_inp`, which replaces occurrences of each parameter name in the FLUKA `.inp` file with the combo value. Random seeds are also injected per-run.
 
 ---
 

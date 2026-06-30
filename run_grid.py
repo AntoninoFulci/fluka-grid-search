@@ -3,6 +3,14 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+# Run without installing anything: put this repo (for `grid_search`) and the
+# bundled FlukaQueueSub submodule (for `backends` / `core`) on sys.path.
+_ROOT = Path(__file__).resolve().parent
+for _p in (_ROOT, _ROOT / "external" / "FlukaQueueSub"):
+    _ps = str(_p)
+    if _ps not in sys.path:
+        sys.path.insert(0, _ps)
+
 from grid_search.backends import queue_adapter
 from grid_search.config import load_config, validate_config
 from grid_search.grid import combo_name, generate_combinations

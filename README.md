@@ -33,28 +33,29 @@ patch each combination with unique random seeds, and hand the runs to FlukaQueue
 
 ---
 
-## Install
+## Setup (no installation required)
 
-Requires Python ≥ 3.11, FLUKA (`rfluka` on `PATH` or set via `rfluka_path`), and —
+Requires Python ≥ 3.10, FLUKA (`rfluka` on `PATH` or set via `rfluka_path`), and —
 for the `ts` backend — [task-spooler](https://vicerveza.homelinux.net/~viric/soft/ts/).
 
-Clone with submodules and install all three projects editable:
+You do **not** need to `pip install` any of the three projects. Just clone with
+submodules and run the scripts directly — `run_grid.py` puts the repo and the
+bundled FlukaQueueSub submodule on `sys.path` automatically.
 
 ```bash
 git clone --recurse-submodules <repo-url>
 cd fluka-grid-search
-pip install -e .
-pip install -e external/FlukaQueueSub
-pip install -e external/FlukaIsotopeAnalysis
-# for development (pytest):
-pip install -e ".[dev]"
-```
-
-Already cloned without `--recurse-submodules`? Run:
-
-```bash
+# already cloned without --recurse-submodules?
 git submodule update --init --recursive
+
+# install only the third-party Python libraries (not the projects themselves):
+pip install pyyaml colorama tabulate rich pandas openpyxl periodictable radioactivedecay
+
+python run_grid.py examples/config.yaml --dry-run
 ```
+
+(If you prefer, the projects can still be installed editable with
+`pip install -e .` — but it is not required.)
 
 ---
 

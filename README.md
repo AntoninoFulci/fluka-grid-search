@@ -198,8 +198,8 @@ All submission is delegated to FlukaQueueSub. Choose via `execution.backend`:
 | `lsf` | uses `queue`/`mem`/`time`/`ntasks` |
 | `condor` | uses `queue`/`mem`/`ncpu`/`disk`/`condor_max_runtime` |
 
-**Limitation:** `fluka.use_dpm` is currently rejected — the FlukaQueueSub backends do
-not emit `rfluka -d`. Add DPM support to FlukaQueueSub to restore it.
+**DPM:** set `fluka.use_dpm: true` to launch with the DPMJET/RQMD executable
+(`rfluka -d`). It is mutually exclusive with `fluka.custom_executable` (`rfluka -e`).
 
 ---
 

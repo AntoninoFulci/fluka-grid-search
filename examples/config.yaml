@@ -11,6 +11,7 @@ fluka:
   primaries: 10000          # optional — overrides the START primary count
   rfluka_path: null         # optional — FLUKA bin dir; null → discovered via `fluka-config --bin`
   custom_executable: null   # optional — passed to rfluka as `-e <exe>`
+  use_dpm: false            # true → launch with rfluka -d (DPMJET/RQMD); mutually exclusive with custom_executable
 
 output:
   directory: results/       # run dirs + patched inputs are written here

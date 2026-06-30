@@ -54,9 +54,6 @@ pip install pyyaml colorama tabulate rich pandas openpyxl periodictable radioact
 python run_grid.py examples/config.yaml --dry-run
 ```
 
-(If you prefer, the projects can still be installed editable with
-`pip install -e .` — but it is not required.)
-
 ---
 
 ## Step 1 — Prepare your FLUKA input template

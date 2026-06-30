@@ -11,7 +11,6 @@ farm. This is the **front end** of a three-project workflow:
 
 This repo does **one job**: take a FLUKA `.inp` template, expand a parameter grid,
 patch each combination with unique random seeds, and hand the runs to FlukaQueueSub.
-Monitoring and analysis are the other two projects' jobs.
 
 ---
 

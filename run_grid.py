@@ -14,7 +14,7 @@ for _p in (_ROOT, _ROOT / "external" / "FlukaQueueSub"):
 from grid_search.backends import queue_adapter
 from grid_search.config import load_config, validate_config
 from grid_search.grid import combo_name, generate_combinations
-from grid_search.workspace import create_run_workspace, patch_inp
+from grid_search.workspace import create_run_workspace, patch_inp, reseed_inp
 from grid_search.seeds import scan_used_seeds, next_seed, find_duplicate_seeds
 
 
@@ -104,13 +104,26 @@ def _submit_combo(params, config, rfluka_bin, args) -> None:
         patch_inp(config.fluka.input, inp_path, params, seed, config.fluka.primaries)
         prepared.append((i, run_name, run_dir, inp_path))
 
-    # Phase 2: abort if any duplicate seed exists on disk
+    # Phase 2: repair any duplicate seeds in place (do NOT abort) and continue
     dups = find_duplicate_seeds(config.output_dir)
     if dups:
+        used = scan_used_seeds(config.output_dir)
+        current = {ip for (_, _, _, ip) in prepared}
         for seed, files in sorted(dups.items()):
-            shared = ", ".join(f"{f.parent.parent.name}/{f.parent.name}" for f in files)
-            print(f"[error] duplicate seed {seed} shared by: {shared}")
-        sys.exit(f"[error] {name}: duplicate RANDOMIZ seeds detected, submission aborted.")
+            shared = ", ".join(
+                f"{f.parent.parent.name}/{f.parent.name}" for f in files
+            )
+            print(f"[seed] duplicate seed {seed} found in: {shared}")
+            # keep one file (prefer one outside this combo, likely already submitted);
+            # regenerate the rest with fresh unique seeds, then keep going
+            ordered = sorted(files, key=lambda f: f in current)
+            for f in ordered[1:]:
+                new = next_seed(used)
+                reseed_inp(f, new)
+                print(
+                    f"[seed]   {f.parent.parent.name}/{f.parent.name}: "
+                    f"reseeded {seed} -> {new}"
+                )
 
     # Phase 3: submit every run via FlukaQueueSub (submit-only; no monitoring here)
     for i, run_name, run_dir, inp_path in prepared:

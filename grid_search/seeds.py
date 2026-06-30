@@ -10,7 +10,7 @@ def scan_used_seeds(output_dir: Path) -> set[int]:
     used: set[int] = set()
     if not root.is_dir():
         return used
-    for inp in root.glob("*/run_*/*.inp"):
+    for inp in root.glob("*/run_*/simulation_*.inp"):
         seed = parse_randomiz(inp)
         if seed is not None:
             used.add(seed)
@@ -28,7 +28,7 @@ def find_duplicate_seeds(output_dir: Path) -> dict[int, list[Path]]:
     seeds: dict[int, list[Path]] = {}
     if not root.is_dir():
         return {}
-    for inp in sorted(root.glob("*/run_*/*.inp")):
+    for inp in sorted(root.glob("*/run_*/simulation_*.inp")):
         seed = parse_randomiz(inp)
         if seed is not None:
             seeds.setdefault(seed, []).append(inp)

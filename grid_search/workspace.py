@@ -38,3 +38,14 @@ def patch_inp(
 
 def generate_seed() -> int:
     return random.randint(1, int(9e7))
+
+
+def reseed_inp(inp_path: Path, seed: int) -> None:
+    """Rewrite only the RANDOMIZ line of an existing input with a new seed."""
+    lines = inp_path.read_text().splitlines(keepends=True)
+    out = []
+    for line in lines:
+        if re.match(r"^RANDOMIZ\s", line):
+            line = f"RANDOMIZ          1.{seed:>10d}\n"
+        out.append(line)
+    inp_path.write_text("".join(out))

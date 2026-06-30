@@ -10,4 +10,4 @@ results/
 **/.DS_Store
 test.yaml
 configs/
-
+.superpowers/

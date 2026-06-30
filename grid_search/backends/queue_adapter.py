@@ -69,6 +69,7 @@ def submit_run(
             iteration=iteration,
             fluka_path=fluka_bin,
             custom_exe=config.fluka.custom_executable,
+            use_dpm=config.fluka.use_dpm,
         )
         cwd = os.getcwd()
         os.chdir(run_dir)
@@ -82,6 +83,7 @@ def submit_run(
         iteration=iteration,
         fluka_path=fluka_bin,
         custom_exe=config.fluka.custom_executable,
+        use_dpm=config.fluka.use_dpm,
     )
     script_path = backend.generate_script(job_info, str(Path(run_dir).resolve()), ns)
     return backend.submit(script_path, job_info, ns)

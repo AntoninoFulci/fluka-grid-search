@@ -113,9 +113,8 @@ def validate_config(config: Config) -> None:
             f"Valid: {sorted(valid_backends)}"
         )
 
-    if config.fluka.use_dpm:
+    if config.fluka.use_dpm and config.fluka.custom_executable:
         raise ValueError(
-            "fluka.use_dpm is no longer supported: submission is delegated to "
-            "FlukaQueueSub, whose backends do not emit 'rfluka -d'. Add DPM support "
-            "to FlukaQueueSub if you need it, then remove this check."
+            "fluka.use_dpm and fluka.custom_executable are mutually exclusive; "
+            "set only one."
         )
